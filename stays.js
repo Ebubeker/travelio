@@ -164,6 +164,8 @@ const findStays = async (userDetails) => {
 
     const searchResponseCurrent = await axios.request(searchOptionsCurrent);
 
+    print(searchResponseDestination)
+
     const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
     const searchCurrent = searchResponseCurrent.data.data.autoCompleteSuggestions.results[0];
 
