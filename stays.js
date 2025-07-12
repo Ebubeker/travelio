@@ -1911,7 +1911,11 @@ const findStays = async (userDetails) => {
 
     return response.data;
   } catch (error) {
-    console.log(error.message)
+    console.log('Full error object:', error);
+    console.log('Error message:', error.message);
+    console.log('Response status:', error.response?.status);
+    console.log('Response data:', error.response?.data);
+    console.log('Request config:', error.config);
   }
   return []
 }
