@@ -11,7 +11,21 @@ const findStays = async (userDetails) => {
       method: 'POST',
       url: 'https://www.booking.com/dml/graphql?lang=en-us',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.booking.com/',
+        'Origin': 'https://www.booking.com',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       },
       data: {
         operationName: 'AutoComplete',
@@ -91,7 +105,21 @@ const findStays = async (userDetails) => {
       method: 'POST',
       url: 'https://www.booking.com/dml/graphql?lang=en-us',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.booking.com/',
+        'Origin': 'https://www.booking.com',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       },
       data: {
         operationName: 'AutoComplete',
@@ -1982,7 +2010,7 @@ async function parseBookingResponseToStays(userDetails, tripId = null) {
         const currency = propertyData.blocks?.[0]?.finalPrice?.currency ?? 0;
 
         const stayRecord = {
-          id: idx + 1, 
+          id: idx + 1,
           trip_id: tripId,
           name: propertyData.displayName.text,
           type: stayType,
@@ -1990,7 +2018,7 @@ async function parseBookingResponseToStays(userDetails, tripId = null) {
           city: basicData.location.city || '',
           country: getCountryName(basicData.location.countryCode || ''),
           check_in_date: userDetails.dates_start,
-          check_in_time: '15:00:00', 
+          check_in_time: '15:00:00',
           check_out_date: userDetails.dates_end,
           check_out_time: '11:00:00',
           nights_count: Math.abs((new Date(userDetails.dates_end) - new Date(userDetails.dates_start)) / 86400000),
