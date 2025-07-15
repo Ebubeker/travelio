@@ -11,6 +11,7 @@ const findStays = async (userDetails) => {
       method: 'POST',
       url: 'https://www.booking.com/dml/graphql?lang=en-us',
       headers: {
+        "cookie": "pcm_personalization_disabled=0; cors_js=1; _gcl_au=1.1.1310596591.1751568863; FPID=FPID2.2.vWR8puxy5JGe1QiN0KoyXzXL9VppdvWQZHuStH3Cdzo%3D.1751568862; FPAU=1.1.1310596591.1751568863; _yjsu_yjad=1751568864.f264a27d-d049-4d9f-a9e1-d54cea8d3157; _ga_P07TP8FRGZ=GS2.1.s1751803652$o1$g0$t1751803653$j59$l0$h0; bkng_sso_session=eyJib29raW5nX2dsb2JhbCI6W3sibG9naW5faGludCI6IjdDUUpzSlhNbnViWDhpTnNubUhLYmVaeEcwUURjMStVYTBCZjM0R25YNUEifV19; bkng_sso_ses=eyJib29raW5nX2dsb2JhbCI6W3siaCI6IjdDUUpzSlhNbnViWDhpTnNubUhLYmVaeEcwUURjMStVYTBCZjM0R25YNUEifV19; _ga_4GY873RFCC=GS2.1.s1751803635$o1$g1$t1751805009$j5$l0$h0; _ga_ME6FRX2E79=GS2.1.s1751803340$o1$g1$t1751805635$j59$l0$h0; pcm_consent=consentedAt%3D2025-07-06T12%3A51%3A39.840Z%26countryCode%3DAL%26expiresAt%3D2026-01-02T12%3A51%3A39.840Z%26implicit%3Dfalse%26regionCode%3D10%26regulation%3Dnone%26legacyRegulation%3Dnone%26consentId%3Dcfc2866b-57c4-488d-a01f-df0d49cbbad4%26analytical%3Dtrue%26marketing%3Dtrue; _gac_UA-116109-18=1.1752073531.CjwKCAjwprjDBhBTEiwA1m1d0hPzumuGQuZbSIO3suNkI5BYCsPPxn3VEfE5-Q4xCXd1GOBpxWRYXxoCyvcQAvD_BwE; _gcl_aw=GCL.1752073534.CjwKCAjwprjDBhBTEiwA1m1d0hPzumuGQuZbSIO3suNkI5BYCsPPxn3VEfE5-Q4xCXd1GOBpxWRYXxoCyvcQAvD_BwE; _gcl_gs=2.1.k1$i1752073528$u228698639; FPGCLGS=2.1.k1$i1752073531$u228698639; FPGCLAW=2.1.kCjwKCAjwprjDBhBTEiwA1m1d0hPzumuGQuZbSIO3suNkI5BYCsPPxn3VEfE5-Q4xCXd1GOBpxWRYXxoCyvcQAvD_BwE$i1752073541; BJS=-; OptanonConsent=implicitConsentCountry=nonGDPR&implicitConsentDate=1751568861404&isGpcEnabled=0&datestamp=Tue+Jul+15+2025+17%3A48%3A58+GMT%2B0200+(Central+European+Summer+Time)&version=202501.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=3e95c4f8-9e7b-4a8c-8eac-2dca84813704&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0004%3A1&AwaitingReconsent=false; _gid=GA1.2.998377142.1752594538; bkng_prue=1; _ga_A12345=GS2.1.s1752594540$o10$g0$t1752594540$j60$l0$h209950859; _ga=GA1.1.1492352810.1751568862; cgumid=6gJf4F9uTE9xJTJGcWRlVEJZNVFiUlRqR2tsU28xMmhqME9RVE5yJTJCMkxTTlhmTnFUYyUzRA; FPLC=SRCwR9GFa0bTGfD52%2FBFEtA202MiGNEfcwuqZqzg8Ogavj%2Bnc3iF%2B%2FFHqO8Ki4GJJmkdDK7UiAuAlvJUACA4nAK1wh47z7eZ%2FM6dTUY13wLZu1FVLarwL7WnN0AEUw%3D%3D; cto_bundle=W5NKjl9RdmZxRjRpcEZOdHFKNUh3S2puMVRsSU5xM0JpS2FjS1FJU1E3SHVGOWZmUHVTN05KOCUyQkdwRTJXaTJLVENyaWM3d3FGcEh1Qm9tUjNQc0tZeVp5TTZHN3djUUhReXVSNWNxR1FHUkRNSzdPJTJGbUlDUDdmNmdlY1A4aHZEMUVGd1RlZndKZ0IzdTRuUFhTSE1lcGFMbGJRJTNEJTNE; _uetsid=3a56af40619311f08a87db71626d9973; _uetvid=4ab5c08062db11ee9596f3f34ca7361e; bkng_sso_auth=CAIQ0+WGHxqKAXO3ChIB/MwvZsXvjona5bnoKM44U/Ep6/RURNnEJGOaeSxPgPPdhNlyrK9qbSoi5jhAFFNgtpcfFe8yBLwQM/yT3YlrRmYPf/cj8IA/aydYQVSGm9XfRHAaW/68mGIY5NsbXnqyBp1wRfjp8hY5PUFsA3JC5UV4xirCrIIFhw/xgS7aYvkaBrr+Yg==; lastSeen=0; bkng=11UmFuZG9tSVYkc2RlIyh9Yaa29%2F3xUOLbaxYXEzBEjsu7LG8aMWWl5sAzys3tpU7fmBOivRV5XpN4ZilLuwesbjUPoirT1dxjPybg4CAEIpWPiEe6BK5Msy7VE5JlW7qZljdwpSuhw1awB2nkY%2FUp3CAE9kl4Vzs8OySbankhszeo4zdwWee66nNG1QskeSezrBXtW4Z1qnHUj83CvSwZ6LKPSSGpTFTwgcVjwb%2FPJdI%3D; aws-waf-token=25dbadc6-a146-40b4-ad35-165cc5e3362e:DgoAqRJubTWSAgAA:AWC09rw+1F3thmIX9N5B8gsKR5+D9gGJiP7HLXZcdtTMuhV+Uc8kEZ97HPTUDfn15E3we4HjZUfNHnJ1Qem7qcQjycpLApO6+oKGhZ1kZWLivQMVWdydjQkIVkg9cdv+b9EDJtLFdyA6+UnD1LDVK35z9wh9ag62HVi280nX7hQqsLWhhTZMNco9IkcZC2gxY44pX0GvvRvFxjy65QC3pgQbvXONZA05bQfPhbLtL4VXlVbZWTzeiZdg0r49Mp/WR6U=",
         'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
@@ -192,7 +193,7 @@ const findStays = async (userDetails) => {
 
     const searchResponseCurrent = await axios.request(searchOptionsCurrent);
 
-    console.log(searchResponseDestination)
+    // console.log(searchResponseDestination)
 
     const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
     const searchCurrent = searchResponseCurrent.data.data.autoCompleteSuggestions.results[0];
@@ -1941,11 +1942,7 @@ const findStays = async (userDetails) => {
 
     return response.data;
   } catch (error) {
-    console.log('Full error object:', error);
     console.log('Error message:', error.message);
-    console.log('Response status:', error.response?.status);
-    console.log('Response data:', error.response?.data);
-    console.log('Request config:', error.config);
   }
   return []
 }
