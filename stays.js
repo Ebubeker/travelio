@@ -1855,6 +1855,9 @@ const findStays = async (userDetails) => {
 
 async function parseBookingResponseToStays(userDetails, tripId = null) {
   const jsonData = await findStays(userDetails);
+
+  console.log(jsonData)
+
   if (!tripId) {
     tripId = uuidv4();
   }

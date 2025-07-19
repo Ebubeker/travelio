@@ -13,6 +13,8 @@ const axios = require('axios');
 // };
 
 async function getFlights(flightDetails) {
+
+  console.log(flightDetails)
   try {
     const response = await axios.request({
       method: 'post',
@@ -113,6 +115,7 @@ async function getFlights(flightDetails) {
     })
 
 
+    // console.log(response.data )
     return response.data;
   } catch (error) {
     console.error(error);
