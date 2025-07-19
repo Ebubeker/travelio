@@ -13,12 +13,8 @@ const findStays = async (userDetails) => {
         'Content-Type': 'application/json',
         'User-Agent': randomUA.getRandom(),
         'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://www.booking.com/',
-        'Origin': 'https://travelio-nju8.onrender.com',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
+        // Remove Origin and Referer headers
+        'Cache-Control': 'no-cache'
       },
       data: {
         operationName: 'AutoComplete',
@@ -89,7 +85,19 @@ const findStays = async (userDetails) => {
       }
     };
 
-    const searchResponseDestination = await axios.request(searchOptionsDestination);
+    try {
+      const searchResponseDestination = await axios.request(searchOptionsDestination);
+      console.log('Success:', searchResponseDestination.data);
+    } catch (error) {
+      console.error('Request failed:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers,
+        message: error.message
+      });
+      throw error;
+    }
 
     const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
     console.log("search destination", searchDestination)
