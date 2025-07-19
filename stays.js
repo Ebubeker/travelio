@@ -1,7 +1,6 @@
-const axios = require('axios');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { getCountryName } = require('./countrynames');
+const {scrapeWithUAOnly} = require('./scrapeWithUAOnly');
 
 const findStays = async (userDetails) => {
   try {
@@ -18,7 +17,7 @@ const findStays = async (userDetails) => {
         'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
         'Accept-Encoding': 'gzip, deflate, br',
         'Referer': 'https://www.booking.com/',
-        'Origin': 'https://www.booking.com',
+        'Origin': 'https://travelio-nju8.onrender.com',
         'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
         'Sec-Ch-Ua-Mobile': '?0',
         'Sec-Ch-Ua-Platform': '"Windows"',
@@ -100,102 +99,10 @@ const findStays = async (userDetails) => {
       }
     };
 
-    const searchResponseDestination = await axios.request(searchOptionsDestination);
+    // const searchResponseDestination = await axios.request(searchOptionsDestination);
 
-    const searchOptionsCurrent = {
-      method: 'POST',
-      url: 'https://www.booking.com/dml/graphql?lang=en-us',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://www.booking.com/',
-        'Origin': 'https://www.booking.com',
-        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      },
-      data: {
-        operationName: 'AutoComplete',
-        variables: {
-          input: {
-            prefixQuery: `${userDetails.current_city} city, ${userDetails.current_country}`,
-            nbSuggestions: 5,
-            fallbackConfig: {
-              mergeResults: true,
-              nbMaxMergedResults: 6,
-              nbMaxThirdPartyResults: 3,
-              sources: ['GOOGLE', 'HERE']
-            },
-            requestContext: {
-              pageviewId: '2bf16a94f75e00ff'
-            }
-          }
-        },
-        extensions: {},
-        query: `query AutoComplete($input: AutoCompleteRequestInput!) {
-          autoCompleteSuggestions(input: $input) {
-            results {
-              destination {
-                countryCode
-                destId
-                destType
-                latitude
-                longitude
-                __typename
-              }
-              displayInfo {
-                imageUrl
-                label
-                labelComponents {
-                  name
-                  type
-                  __typename
-                }
-                showEntireHomesCheckbox
-                title
-                subTitle
-                __typename
-              }
-              metaData {
-                isSkiItem
-                langCode
-                maxLosData {
-                  extendedLoS
-                  __typename
-                }
-                metaMatches {
-                  id
-                  text
-                  type
-                  __typename
-                }
-                roundTrip
-                webFilters
-                autocompleteResultId
-                autocompleteResultSource
-                __typename
-              }
-              __typename
-            }
-            __typename
-          }
-        }`
-      }
-    };
-
-    const searchResponseCurrent = await axios.request(searchOptionsCurrent);
-
-    // console.log(searchResponseDestination)
-
-    const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
+    const searchDestination = scrapeWithUAOnly('https://www.booking.com/index.html?lang=en-us', userDetails.destination_city, getCountryName(userDetails.destination_country))
+    // searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
     const searchCurrent = searchResponseCurrent.data.data.autoCompleteSuggestions.results[0];
 
     const startdate = new Date(userDetails.dates_start);
