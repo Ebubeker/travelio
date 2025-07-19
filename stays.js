@@ -1,8 +1,54 @@
 const { v4: uuidv4 } = require('uuid');
 const { getCountryName } = require('./countrynames');
 const randomUA = require('random-useragent')
+const { HttpsProxyAgent } = require('https-proxy-agent');
+
+// Add your proxies array at the top
+const proxies = [
+  "38.154.227.167:5868:gdcucnwu:1w6ce41l9rzj",
+  "23.95.150.145:6114:gdcucnwu:1w6ce41l9rzj",
+  "198.23.239.134:6540:gdcucnwu:1w6ce41l9rzj",
+  "45.38.107.97:6014:gdcucnwu:1w6ce41l9rzj",
+  "207.244.217.165:6712:gdcucnwu:1w6ce41l9rzj",
+  "107.172.163.27:6543:gdcucnwu:1w6ce41l9rzj",
+  "216.10.27.159:6837:gdcucnwu:1w6ce41l9rzj",
+  "136.0.207.84:6661:gdcucnwu:1w6ce41l9rzj",
+  "142.147.128.93:6593:gdcucnwu:1w6ce41l9rzj",
+  "206.41.172.74:6634:gdcucnwu:1w6ce41l9rzj"
+];
+
+// Function to randomly select a proxy
+function getRandomProxy() {
+  return proxies[Math.floor(Math.random() * proxies.length)];
+}
+
+// Function to parse proxy string
+function parseProxy(proxyString) {
+  const [host, port, username, password] = proxyString.split(':');
+  return {
+    host,
+    port: parseInt(port),
+    auth: {
+      username,
+      password
+    }
+  };
+}
 
 const findStays = async (userDetails) => {
+
+  const selectedProxy = getRandomProxy();
+  const proxyConfig = parseProxy(selectedProxy);
+
+  const [host, port, username, password] = selectedProxy.split(':');
+
+  console.log(`Using proxy: ${host}:${port}`);
+
+  // Create proxy URL for https-proxy-agent
+  const proxyUrl = `http://${username}:${password}@${host}:${port}`;
+  const agent = new HttpsProxyAgent(proxyUrl);
+
+
   try {
     var axios = require("axios").default;
 
@@ -16,6 +62,7 @@ const findStays = async (userDetails) => {
         // Remove Origin and Referer headers
         'Cache-Control': 'no-cache'
       },
+      httpsAgent: agent,
       data: {
         operationName: 'AutoComplete',
         variables: {
