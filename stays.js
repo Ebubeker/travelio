@@ -85,22 +85,12 @@ const findStays = async (userDetails) => {
       }
     };
 
-    try {
-      const searchResponseDestination = await axios.request(searchOptionsDestination);
-      console.log('Success:', searchResponseDestination.data);
-    } catch (error) {
-      console.error('Request failed:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        headers: error.response?.headers,
-        message: error.message
-      });
-      throw error;
-    }
+    const searchResponseDestination = await axios.request(searchOptionsDestination);
+
+    console.log("search destination", searchResponseDestination)
+
 
     const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
-    console.log("search destination", searchDestination)
     // scrapeWithUAOnly('https://www.booking.com/index.html?lang=en-us', userDetails.destination_city, getCountryName(userDetails.destination_country))
 
     const startdate = new Date(userDetails.dates_start);
