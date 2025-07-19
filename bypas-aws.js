@@ -144,7 +144,7 @@ const { randomInt } = require('crypto');
  */
 async function scrapeWithUAOnly(entryUrl, city, country) {
   // 1. Launch Playwright browser
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, executablePath: chromium.executablePath(), });
 
   // 2. Create a new context with a random User-Agent
   const userAgent = randomUA.getRandom();
