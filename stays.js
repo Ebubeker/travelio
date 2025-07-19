@@ -102,6 +102,7 @@ const findStays = async (userDetails) => {
     const searchResponseDestination = await axios.request(searchOptionsDestination);
 
     const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
+    console.log("search destination", searchDestination)
     // scrapeWithUAOnly('https://www.booking.com/index.html?lang=en-us', userDetails.destination_city, getCountryName(userDetails.destination_country))
 
     const startdate = new Date(userDetails.dates_start);
