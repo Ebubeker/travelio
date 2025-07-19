@@ -1,5 +1,5 @@
 const randomUA = require('random-useragent')
-const puppeteer = require('puppeteer-extra')
+const puppeteer = require('puppeteer')
 const StealthPlugin = require('puppeteer-extra-plugin-stealth')
 const axios = require('axios')
 const { randomInt } = require('crypto')
