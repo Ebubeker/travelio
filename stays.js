@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { getCountryName } = require('./countrynames');
-const {scrapeWithUAOnly} = require('./scrapeWithUAOnly');
+const {scrapeWithUAOnly} = require('./bypas-aws');
 
 const findStays = async (userDetails) => {
   try {
