@@ -154,6 +154,7 @@ const findStays = async (userDetails) => {
     const options = {
       method: 'POST',
       url: 'https://www.booking.com/dml/graphql',
+      httpsAgent: agent,
       params: {
         ss: searchDestination.displayInfo.label,
         ssne: 'Tirana',
