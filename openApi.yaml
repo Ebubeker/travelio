@@ -1,0 +1,795 @@
+openapi: 3.0.3
+info:
+  title: AI Travel Recommendation API
+  description: |
+    A comprehensive travel recommendation API that provides flight searches, accommodation recommendations, and AI-powered travel suggestions. 
+    
+    This API integrates with multiple travel providers to offer:
+    - Real-time flight search from Kiwi.com
+    - Hotel and accommodation search from Booking.com
+    - AI-powered travel recommendations using LLaMA 2
+    - Budget analysis and travel planning assistance
+    
+    **Features:**
+    - Fetch flights between any two cities with flexible date ranges
+    - Search for accommodations with various filters and preferences
+    - Get AI-generated recommendations based on travel style and interests
+    - Comprehensive budget breakdown and analysis
+    - Support for multiple currencies and travel preferences
+  version: 1.0.0
+  contact:
+    name: Travel API Support
+    email: support@travelapi.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://travel-api.rapidapi.com/v1
+    description: Production server
+  - url: http://localhost:3000
+    description: Development server
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      summary: Health check endpoint
+      description: Check if the API is running and healthy
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  aiProvider:
+                    type: string
+                    example: "replicate"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-07-19T12:00:00.000Z"
+
+  /user-details:
+    post:
+      tags:
+        - Travel Planning
+      summary: Get comprehensive travel recommendations
+      description: |
+        Get complete travel recommendations including flights, accommodations, and AI-powered suggestions based on user preferences.
+        This is the main endpoint that combines all travel data with optional AI analysis.
+      operationId: getTravelRecommendations
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TravelRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TravelRequest'
+      responses:
+        '200':
+          description: Successfully retrieved travel recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelRecommendationResponse'
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /flights:
+    post:
+      tags:
+        - Flights
+      summary: Search for flights
+      description: |
+        Search for flights between two cities for specific dates. 
+        Returns both outbound and return flights with pricing and airline details.
+      operationId: searchFlights
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/FlightSearchRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlightSearchRequest'
+      responses:
+        '200':
+          description: Successfully retrieved flight options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlightSearchResponse'
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /stays:
+    post:
+      tags:
+        - Accommodations
+      summary: Search for accommodations
+      description: |
+        Search for hotels, apartments, and other accommodations in a specific city for given dates.
+        Includes ratings, amenities, pricing, and booking information.
+      operationId: searchStays
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StaySearchRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaySearchRequest'
+      responses:
+        '200':
+          description: Successfully retrieved accommodation options
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaySearchResponse'
+        '400':
+          description: Bad request - missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ai-recommendations:
+    post:
+      tags:
+        - AI Recommendations
+      summary: Generate AI-powered travel recommendations
+      description: |
+        Generate personalized travel recommendations using AI based on provided flight and accommodation data.
+        Analyzes user preferences to suggest the best options with detailed reasoning.
+      operationId: generateAIRecommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIRecommendationRequest'
+      responses:
+        '200':
+          description: Successfully generated AI recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIRecommendationResponse'
+        '400':
+          description: Bad request - missing required data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-RapidAPI-Key
+      description: RapidAPI key for authentication
+
+  schemas:
+    TravelRequest:
+      type: object
+      required:
+        - destination_city
+        - destination_country
+        - budget
+        - dates_start
+        - dates_end
+        - current_city
+        - current_country
+      properties:
+        destination_city:
+          type: string
+          description: Destination city name
+          example: "Paris"
+        destination_country:
+          type: string
+          description: Destination country code (ISO 2-letter)
+          example: "fr"
+        budget:
+          type: number
+          format: float
+          description: Total budget for the trip in USD
+          example: 2000.00
+          minimum: 100
+        dates_start:
+          type: string
+          format: date
+          description: Trip start date (YYYY-MM-DD)
+          example: "2025-08-15"
+        dates_end:
+          type: string
+          format: date
+          description: Trip end date (YYYY-MM-DD)
+          example: "2025-08-22"
+        current_city:
+          type: string
+          description: Departure city name
+          example: "New York"
+        current_country:
+          type: string
+          description: Departure country code (ISO 2-letter)
+          example: "us"
+        travel_style:
+          type: string
+          description: Preferred travel style
+          enum: [luxury, budget, adventure, cultural, business, family]
+          example: "cultural"
+        travel_interests:
+          type: string
+          description: Travel interests and preferences
+          example: "museums, local cuisine, historical sites"
+        enable_ai:
+          type: boolean
+          description: Enable AI-powered recommendations
+          default: true
+          example: true
+
+    FlightSearchRequest:
+      type: object
+      required:
+        - destination_city
+        - destination_country
+        - dates_start
+        - dates_end
+        - current_city
+        - current_country
+      properties:
+        destination_city:
+          type: string
+          description: Destination city name
+          example: "London"
+        destination_country:
+          type: string
+          description: Destination country code (ISO 2-letter)
+          example: "gb"
+        dates_start:
+          type: string
+          format: date
+          description: Departure date (YYYY-MM-DD)
+          example: "2025-09-01"
+        dates_end:
+          type: string
+          format: date
+          description: Return date (YYYY-MM-DD)
+          example: "2025-09-08"
+        current_city:
+          type: string
+          description: Departure city name
+          example: "Boston"
+        current_country:
+          type: string
+          description: Departure country code (ISO 2-letter)
+          example: "us"
+        budget:
+          type: number
+          format: float
+          description: Optional budget constraint
+          example: 800.00
+
+    StaySearchRequest:
+      type: object
+      required:
+        - destination_city
+        - destination_country
+        - dates_start
+        - dates_end
+      properties:
+        destination_city:
+          type: string
+          description: Destination city name
+          example: "Rome"
+        destination_country:
+          type: string
+          description: Destination country code (ISO 2-letter)
+          example: "it"
+        dates_start:
+          type: string
+          format: date
+          description: Check-in date (YYYY-MM-DD)
+          example: "2025-10-10"
+        dates_end:
+          type: string
+          format: date
+          description: Check-out date (YYYY-MM-DD)
+          example: "2025-10-15"
+        budget:
+          type: number
+          format: float
+          description: Optional budget constraint
+          example: 1200.00
+
+    Flight:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Flight record ID
+          example: 1
+        trip_id:
+          type: string
+          description: Associated trip identifier
+          example: "trip-1"
+        flight_number:
+          type: string
+          description: Flight number
+          example: "BA123"
+        airline:
+          type: string
+          description: Airline name
+          example: "British Airways"
+        departure_date:
+          type: string
+          format: date
+          description: Departure date
+          example: "2025-09-01"
+        departure_time:
+          type: string
+          format: time
+          description: Departure time
+          example: "14:30:00"
+        arrival_date:
+          type: string
+          format: date
+          description: Arrival date
+          example: "2025-09-01"
+        arrival_time:
+          type: string
+          format: time
+          description: Arrival time
+          example: "18:45:00"
+        origin_airport:
+          type: string
+          description: Origin airport code
+          example: "JFK"
+        origin_city:
+          type: string
+          description: Origin city name
+          example: "New York"
+        destination_airport:
+          type: string
+          description: Destination airport code
+          example: "LHR"
+        destination_city:
+          type: string
+          description: Destination city name
+          example: "London"
+        price:
+          type: number
+          format: float
+          description: Flight price
+          example: 450.00
+        currency:
+          type: string
+          description: Price currency
+          example: "USD"
+        booking_reference:
+          type: string
+          description: Booking reference code
+          example: "ABC123"
+        notes:
+          type: string
+          description: Additional flight information
+          example: "Booking URL: https://www.kiwi.com/booking/abc123"
+        status:
+          type: string
+          description: Flight availability status
+          example: "available"
+        is_return_flight:
+          type: boolean
+          description: Whether this is a return flight
+          example: false
+        created_at:
+          type: string
+          format: date-time
+          description: Record creation timestamp
+          example: "2025-07-19T12:00:00.000Z"
+
+    Stay:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Accommodation record ID
+          example: 1
+        trip_id:
+          type: string
+          description: Associated trip identifier
+          example: "trip-1"
+        name:
+          type: string
+          description: Accommodation name
+          example: "Grand Hotel Plaza"
+        type:
+          type: string
+          description: Accommodation type
+          enum: [hotel, apartment, guesthouse, hostel]
+          example: "hotel"
+        address:
+          type: string
+          description: Full address
+          example: "123 Main Street, Downtown"
+        city:
+          type: string
+          description: City name
+          example: "Rome"
+        country:
+          type: string
+          description: Country name
+          example: "Italy"
+        check_in_date:
+          type: string
+          format: date
+          description: Check-in date
+          example: "2025-10-10"
+        check_in_time:
+          type: string
+          format: time
+          description: Check-in time
+          example: "15:00:00"
+        check_out_date:
+          type: string
+          format: date
+          description: Check-out date
+          example: "2025-10-15"
+        check_out_time:
+          type: string
+          format: time
+          description: Check-out time
+          example: "11:00:00"
+        nights_count:
+          type: integer
+          description: Number of nights
+          example: 5
+        price_per_night:
+          type: number
+          format: float
+          description: Price per night
+          example: 150.00
+        total_price:
+          type: number
+          format: float
+          description: Total accommodation cost
+          example: 750.00
+        currency:
+          type: string
+          description: Price currency
+          example: "USD"
+        rating:
+          type: number
+          format: float
+          description: Accommodation rating (0-10)
+          example: 8.5
+        website:
+          type: string
+          format: uri
+          description: Accommodation website
+          example: "https://www.booking.com/hotel/grand-plaza.html"
+        booking_link:
+          type: string
+          format: uri
+          description: Direct booking link
+          example: "https://www.booking.com/hotel/grand-plaza.html?checkin=2025-10-10"
+        amenities:
+          type: string
+          description: JSON string of available amenities
+          example: "[\"WiFi\", \"Pool\", \"Gym\", \"Restaurant\"]"
+        photo:
+          type: string
+          format: uri
+          description: Main photo URL
+          example: "https://cf.bstatic.com/images/hotel/max1024x768/123456789.jpg"
+        notes:
+          type: string
+          description: Additional notes about the accommodation
+          example: "Beautiful historic hotel in the city center"
+        status:
+          type: string
+          description: Availability status
+          example: "available"
+        created_at:
+          type: string
+          format: date-time
+          description: Record creation timestamp
+          example: "2025-07-19T12:00:00.000Z"
+
+    BudgetAnalysis:
+      type: object
+      properties:
+        total_cost:
+          type: number
+          format: float
+          description: Total estimated cost
+          example: 1200.00
+        flight_cost:
+          type: number
+          format: float
+          description: Flight cost
+          example: 450.00
+        accommodation_cost:
+          type: number
+          format: float
+          description: Accommodation cost
+          example: 750.00
+        user_budget:
+          type: number
+          format: float
+          description: User's specified budget
+          example: 2000.00
+        on_budget:
+          type: boolean
+          description: Whether the selection is within budget
+          example: true
+        budget_feedback:
+          type: string
+          description: AI-generated budget feedback
+          example: "Great news! Your selections are well within budget with $800.00 remaining for activities, meals, and shopping."
+        remaining_budget:
+          type: number
+          format: float
+          description: Remaining budget amount
+          example: 800.00
+        budget_percentage_used:
+          type: number
+          format: float
+          description: Percentage of budget used
+          example: 60.0
+        currency:
+          type: string
+          description: Currency code
+          example: "USD"
+
+    AIRecommendationRequest:
+      type: object
+      required:
+        - userDetails
+        - flights
+        - stays
+      properties:
+        userDetails:
+          $ref: '#/components/schemas/TravelRequest'
+        flights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flight'
+          description: Available flight options
+        stays:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stay'
+          description: Available accommodation options
+
+    TravelRecommendationResponse:
+      type: object
+      properties:
+        userDetails:
+          $ref: '#/components/schemas/TravelRequest'
+        flights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flight'
+          description: Available flight options
+        stays:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stay'
+          description: Available accommodation options
+        recommended_flight:
+          $ref: '#/components/schemas/Flight'
+        recommended_hotel:
+          $ref: '#/components/schemas/Stay'
+        flight_reason:
+          type: string
+          description: AI explanation for flight recommendation
+          example: "Selected based on optimal balance of price and departure time."
+        hotel_reason:
+          type: string
+          description: AI explanation for hotel recommendation
+          example: "Selected based on highest rating and suitable accommodation type."
+        budget_analysis:
+          $ref: '#/components/schemas/BudgetAnalysis'
+        ai_analysis:
+          type: object
+          properties:
+            provider:
+              type: string
+              description: AI provider used
+              example: "replicate"
+            model:
+              type: string
+              description: AI model used
+              example: "llama-2-70b"
+            parsing_error:
+              type: boolean
+              description: Whether there was an error parsing AI response
+              example: false
+        quick_tips:
+          type: array
+          items:
+            type: string
+          description: Quick travel tips for the destination
+          example: ["Currency: Euro (EUR)", "Best time: May-September", "Don't miss: Colosseum and Vatican"]
+        metadata:
+          type: object
+          properties:
+            flightCount:
+              type: integer
+              description: Number of flights found
+              example: 15
+            stayCount:
+              type: integer
+              description: Number of accommodations found
+              example: 25
+            aiEnabled:
+              type: boolean
+              description: Whether AI was enabled for this request
+              example: true
+            timestamp:
+              type: string
+              format: date-time
+              description: Response timestamp
+              example: "2025-07-19T12:00:00.000Z"
+
+    FlightSearchResponse:
+      type: object
+      properties:
+        flights:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flight'
+          description: Available flight options
+        metadata:
+          type: object
+          properties:
+            flightCount:
+              type: integer
+              description: Number of flights found
+              example: 15
+            timestamp:
+              type: string
+              format: date-time
+              description: Response timestamp
+              example: "2025-07-19T12:00:00.000Z"
+
+    StaySearchResponse:
+      type: object
+      properties:
+        stays:
+          type: array
+          items:
+            $ref: '#/components/schemas/Stay'
+          description: Available accommodation options
+        metadata:
+          type: object
+          properties:
+            stayCount:
+              type: integer
+              description: Number of accommodations found
+              example: 25
+            timestamp:
+              type: string
+              format: date-time
+              description: Response timestamp
+              example: "2025-07-19T12:00:00.000Z"
+
+    AIRecommendationResponse:
+      type: object
+      properties:
+        recommendations:
+          type: object
+          properties:
+            recommended_flight:
+              $ref: '#/components/schemas/Flight'
+            recommended_hotel:
+              $ref: '#/components/schemas/Stay'
+            flight_reason:
+              type: string
+              description: AI explanation for flight recommendation
+              example: "Selected based on optimal balance of price and departure time."
+            hotel_reason:
+              type: string
+              description: AI explanation for hotel recommendation
+              example: "Selected based on highest rating and suitable accommodation type."
+            budget_analysis:
+              $ref: '#/components/schemas/BudgetAnalysis'
+            ai_provider:
+              type: string
+              description: AI provider used
+              example: "replicate"
+            ai_model:
+              type: string
+              description: AI model used
+              example: "llama-2-70b"
+        metadata:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+              description: Response timestamp
+              example: "2025-07-19T12:00:00.000Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Missing required fields"
+        message:
+          type: string
+          description: Detailed error description
+          example: "The following fields are required: destination_city, destination_country"
+        missingFields:
+          type: array
+          items:
+            type: string
+          description: List of missing required fields
+          example: ["destination_city", "budget"]
+
+tags:
+  - name: System
+    description: System health and status endpoints
+  - name: Travel Planning
+    description: Comprehensive travel planning with AI recommendations
+  - name: Flights
+    description: Flight search and booking operations
+  - name: Accommodations
+    description: Hotel and accommodation search operations
+  - name: AI Recommendations
+    description: AI-powered travel recommendations and analysis
+
+externalDocs:
+  description: Find out more about our Travel API
+  url: https://docs.travelapi.com
