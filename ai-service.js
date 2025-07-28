@@ -2,23 +2,37 @@ const axios = require('axios');
 
 class AITravelRecommendationService {
   constructor(config = {}) {
-    this.provider = config.provider || 'replicate'; // 'ollama' or 'replicate'
-    this.ollamaUrl = config.ollamaUrl || 'http://localhost:11434';
-    this.replicateApiToken = config.replicateApiToken || process.env.REPLICATE_API_TOKEN;
-    this.model = config.model || 'llama2';
+    this.geminiApiKey = process.env.GEMINI_API_KEY;
+    this.model = 'gemini-2.0-flash';
+    this.provider = 'gemini';
   }
 
-  // Generate travel recommendations using Llama 2
+  // Generate travel recommendations using Gemini AI
   async generateRecommendations(userDetails, flights, stays) {
+    // Validate inputs
+    if (!flights || flights.length === 0) {
+      throw new Error('No flights data provided');
+    }
+    
+    if (!stays || stays.length === 0) {
+      throw new Error('No accommodation data provided');
+    }
+
+    const outboundFlights = flights.filter(flight => !flight.is_return_flight);
+    const returnFlights = flights.filter(flight => flight.is_return_flight);
+
+    if (outboundFlights.length === 0) {
+      throw new Error('No outbound flights found');
+    }
+
+    if (returnFlights.length === 0) {
+      throw new Error('No return flights found');
+    }
+
     const prompt = this.buildPrompt(userDetails, flights, stays);
     
     try {
-      let aiResponse;
-      if (this.provider === 'ollama') {
-        aiResponse = await this.callOllama(prompt);
-      } else if (this.provider === 'replicate') {
-        aiResponse = await this.callReplicate(prompt);
-      }
+      const aiResponse = await this.callGemini(prompt);
       
       // Parse AI response to extract recommendations
       const recommendations = this.parseAIRecommendations(
@@ -27,169 +41,368 @@ class AITravelRecommendationService {
         stays,
         userDetails
       );
+
+      console.log(recommendations)
       
       return recommendations;
     } catch (error) {
-      console.error('Error generating AI recommendations:', error);
-      throw error;
+      // Enhanced fallback with more detailed logging
+      return this.generateFallbackRecommendations(userDetails, flights, stays, error.message);
     }
   }
 
-  // Build a comprehensive prompt for Llama 2
+  // Enhanced fallback method
+  generateFallbackRecommendations(userDetails, flights, stays, errorMessage) {
+    const outboundFlights = flights.filter(flight => !flight.is_return_flight);
+    const returnFlights = flights.filter(flight => flight.is_return_flight);
+    
+    const recommendedOutboundFlight = this.selectBestFlightObject(outboundFlights);
+    const recommendedReturnFlight = this.selectBestFlightObject(returnFlights);
+    const recommendedHotel = this.selectBestStayObject(stays);
+    
+    const budgetAnalysis = this.calculateBudgetAnalysisWithTwoFlights(
+      recommendedOutboundFlight, 
+      recommendedReturnFlight, 
+      recommendedHotel, 
+      userDetails
+    );
+    
+    return {
+      recommended_outbound_flight: recommendedOutboundFlight,
+      recommended_return_flight: recommendedReturnFlight,
+      recommended_hotel: recommendedHotel,
+      outbound_flight_reason: 'Algorithmic selection based on price and timing optimization.',
+      return_flight_reason: 'Algorithmic selection based on price and timing optimization.',
+      hotel_reason: 'Algorithmic selection based on rating and amenities.',
+      budget_analysis: budgetAnalysis,
+      ai_provider: 'fallback',
+      ai_model: 'algorithmic',
+      fallback_used: true,
+      original_error: errorMessage
+    };
+  }
+
+  // Build a comprehensive prompt for Gemini
   buildPrompt(userDetails, flights, stays) {
+    // Separate outbound and return flights
+    const outboundFlights = flights.filter(flight => !flight.is_return_flight).slice(0, 5);
+    const returnFlights = flights.filter(flight => flight.is_return_flight).slice(0, 5);
+
+    // Validate we have the required data
+    if (outboundFlights.length === 0 || returnFlights.length === 0) {
+      throw new Error('Insufficient flight data for prompt generation');
+    }
+
     const prompt = `You are a travel advisor helping a customer plan their trip. Based on the following information, provide personalized recommendations:
 
 USER PREFERENCES:
-- Destination: ${userDetails.destination_city}, ${userDetails.destination_country}
-- Travel dates: ${userDetails.dates_start} to ${userDetails.dates_end}
-- Budget: ${userDetails.budget}
-- From: ${userDetails.current_city}, ${userDetails.current_country}
+- Destination: ${userDetails.destination_city || 'Not specified'}, ${userDetails.destination_country || 'Not specified'}
+- Travel dates: ${userDetails.dates_start || 'Not specified'} to ${userDetails.dates_end || 'Not specified'}
+- Budget: ${userDetails.budget || 'Not specified'}
+- From: ${userDetails.current_city || 'Not specified'}, ${userDetails.current_country || 'Not specified'}
 ${userDetails.travel_style ? `- Travel style: ${userDetails.travel_style}` : ''}
 ${userDetails.travel_interests ? `- Interests: ${userDetails.travel_interests}` : ''}
 
-AVAILABLE FLIGHTS (Top 5 options):
-${this.formatFlights(flights.slice(0, 5))}
+AVAILABLE OUTBOUND FLIGHTS (Top ${outboundFlights.length} options):
+${this.formatFlightsByType(outboundFlights, 'Outbound')}
 
-AVAILABLE ACCOMMODATIONS (Top 5 options):
+AVAILABLE RETURN FLIGHTS (Top ${returnFlights.length} options):
+${this.formatFlightsByType(returnFlights, 'Return')}
+
+AVAILABLE ACCOMMODATIONS (Top ${stays.slice(0, 5).length} options):
 ${this.formatStays(stays.slice(0, 5))}
 
-Based on this information, please provide:
-1. THE BEST FLIGHT OPTION - Choose only ONE flight that best balances price, timing, and convenience
-2. THE BEST ACCOMMODATION - Choose only ONE stay that perfectly matches the user's style and budget
-3. WHY THESE ARE THE BEST CHOICES - Explain your reasoning
-4. BUDGET BREAKDOWN showing estimated costs with these choices
-5. KEY TRAVEL TIPS specific to their destination and travel dates
+IMPORTANT: You must provide specific numerical selections for each category.
 
-Be decisive and confident in your single recommendation for each category. Format your response in a clear, structured way.`;
+Based on this information, please provide:
+1. THE BEST OUTBOUND FLIGHT - Choose only ONE outbound flight that best balances price, timing, and convenience
+2. THE BEST RETURN FLIGHT - Choose only ONE return flight that best balances price, timing, and convenience
+3. THE BEST ACCOMMODATION - Choose only ONE stay that perfectly matches the user's style and budget
+4. WHY THESE ARE THE BEST CHOICES - Explain your reasoning for each selection
+5. BUDGET BREAKDOWN showing estimated costs with these choices
+6. KEY TRAVEL TIPS specific to their destination and travel dates
+
+Be decisive and confident in your single recommendation for each category. Format your response in a clear, structured way.
+
+CRITICAL: To help me parse your response, you MUST include these exact markers in your answer:
+OUTBOUND_FLIGHT_SELECTION: [number from 1-${outboundFlights.length}]
+RETURN_FLIGHT_SELECTION: [number from 1-${returnFlights.length}]
+HOTEL_SELECTION: [number from 1-${Math.min(stays.length, 5)}]
+OUTBOUND_FLIGHT_REASON: [your reasoning for the outbound flight choice]
+RETURN_FLIGHT_REASON: [your reasoning for the return flight choice]
+HOTEL_REASON: [your reasoning for the hotel choice]
+
+Please ensure you include ALL of these markers with the exact format shown above.`;
 
     return prompt;
   }
 
-  // Format flight data for the prompt
-  formatFlights(flights) {
+  // Enhanced format flight data for the prompt by type
+  formatFlightsByType(flights, type) {
+    if (!flights || flights.length === 0) {
+      return `No ${type.toLowerCase()} flights available`;
+    }
+
     return flights.map((flight, index) => {
-      const outbound = flight.is_return_flight ? 'Return' : 'Outbound';
+      // Handle missing data gracefully
+      const airline = flight.airline || 'Unknown Airline';
+      const flightNumber = flight.flight_number || 'N/A';
+      const originCity = flight.origin_city || flight.origin_airport || 'Unknown';
+      const destCity = flight.destination_city || flight.destination_airport || 'Unknown';
+      const originAirport = flight.origin_airport || 'N/A';
+      const destAirport = flight.destination_airport || 'N/A';
+      const departureDate = flight.departure_date || 'N/A';
+      const departureTime = flight.departure_time || 'N/A';
+      const price = flight.price || 0;
+      const currency = flight.currency || 'USD';
+      const duration = this.calculateDuration(flight.departure_time, flight.arrival_time);
+
       return `
-${index + 1}. ${outbound} Flight:
-   - ${flight.airline} ${flight.flight_number}
-   - Route: ${flight.origin_city} (${flight.origin_airport}) → ${flight.destination_city} (${flight.destination_airport})
-   - Date: ${flight.departure_date} at ${flight.departure_time}
-   - Price: ${flight.price} ${flight.currency}
-   - Duration: ${this.calculateDuration(flight.departure_time, flight.arrival_time)}`;
+${index + 1}. ${type} Flight:
+   - ${airline} ${flightNumber}
+   - Route: ${originCity} (${originAirport}) → ${destCity} (${destAirport})
+   - Date: ${departureDate} at ${departureTime}
+   - Price: ${price} ${currency}
+   - Duration: ${duration}`;
     }).join('\n');
   }
 
-  // Format flights with numbers for AI selection
-  formatFlightsNumbered(flights) {
-    return flights.map((flight, index) => {
-      const outbound = flight.is_return_flight ? 'Return' : 'Outbound';
-      return `${index + 1}. ${flight.airline} ${flight.flight_number} | ${flight.origin_airport}→${flight.destination_airport} | ${flight.departure_date} ${flight.departure_time} | ${flight.price}`;
-    }).join('\n');
-  }
-
-  // Format stay data for the prompt
+  // Enhanced format stay data for the prompt
   formatStays(stays) {
+    if (!stays || stays.length === 0) {
+      return 'No accommodations available';
+    }
+
     return stays.map((stay, index) => {
+      const name = stay.name || 'Unnamed Property';
+      const type = stay.type || 'Unknown Type';
+      const address = stay.address || 'Address not provided';
+      const city = stay.city || 'City not specified';
+      const rating = stay.rating ? `${stay.rating}/10` : 'Not rated';
+      const totalPrice = stay.total_price || 0;
+      const currency = stay.currency || 'USD';
+      const nightsCount = stay.nights_count || 'N/A';
+      const website = stay.website || 'Website not available';
+      
+      let amenitiesText = '';
+      if (stay.amenities) {
+        try {
+          const amenities = typeof stay.amenities === 'string' ? JSON.parse(stay.amenities) : stay.amenities;
+          if (Array.isArray(amenities) && amenities.length > 0) {
+            amenitiesText = `\n   - Amenities: ${amenities.join(', ')}`;
+          }
+        } catch (e) {
+          // If amenities parsing fails, skip it
+        }
+      }
+
       return `
-${index + 1}. ${stay.name}
-   - Type: ${stay.type}
-   - Location: ${stay.address}, ${stay.city}
-   - Rating: ${stay.rating ? stay.rating + '/10' : 'Not rated'}
-   - Total Price: ${stay.total_price} ${stay.currency} (${stay.nights_count} nights)
-   ${stay.amenities ? `- Amenities: ${JSON.parse(stay.amenities).join(', ')}` : ''}
-   - Website: ${stay.website}`;
+${index + 1}. ${name}
+   - Type: ${type}
+   - Location: ${address}, ${city}
+   - Rating: ${rating}
+   - Total Price: ${totalPrice} ${currency} (${nightsCount} nights)${amenitiesText}
+   - Website: ${website}`;
     }).join('\n');
   }
 
-  // Format stays with numbers for AI selection
-  formatStaysNumbered(stays) {
-    return stays.map((stay, index) => {
-      const rating = stay.rating ? `${stay.rating}/10` : 'Unrated';
-      return `${index + 1}. ${stay.name} | ${stay.type} | ${rating} | ${stay.total_price} ${stay.currency}`;
-    }).join('\n');
-  }
-
-  // Parse AI response to extract flight and hotel selections
+  // FIXED: Enhanced parsing with better error handling and logging
   parseAIRecommendations(aiText, flights, stays, userDetails) {
     try {
-      // Extract flight selection
-      const flightMatch = aiText.match(/FLIGHT_SELECTION:\s*(\d+)/);
-      const hotelMatch = aiText.match(/HOTEL_SELECTION:\s*(\d+)/);
-      const flightReasonMatch = aiText.match(/FLIGHT_REASON:\s*(.+)/);
-      const hotelReasonMatch = aiText.match(/HOTEL_REASON:\s*(.+)/);
+      // Separate flights by type
+      const outboundFlights = flights.filter(flight => !flight.is_return_flight);
+      const returnFlights = flights.filter(flight => flight.is_return_flight);
+
+      // Extract selections with more flexible regex
+      const outboundFlightMatch = aiText.match(/OUTBOUND_FLIGHT_SELECTION:\s*[\[\(]?(\d+)[\]\)]?/i);
+      const returnFlightMatch = aiText.match(/RETURN_FLIGHT_SELECTION:\s*[\[\(]?(\d+)[\]\)]?/i);
+      const hotelMatch = aiText.match(/HOTEL_SELECTION:\s*[\[\(]?(\d+)[\]\)]?/i);
       
-      let flightIndex = flightMatch ? parseInt(flightMatch[1]) - 1 : 0;
+      // Extract reasons with more flexible patterns
+      const outboundFlightReasonMatch = aiText.match(/OUTBOUND_FLIGHT_REASON:\s*(.+?)(?=\n\n|RETURN_FLIGHT_REASON|HOTEL_REASON|$)/s);
+      const returnFlightReasonMatch = aiText.match(/RETURN_FLIGHT_REASON:\s*(.+?)(?=\n\n|HOTEL_REASON|$)/s);
+      const hotelReasonMatch = aiText.match(/HOTEL_REASON:\s*(.+?)(?=\n\n|$)/s);
+      
+      // Get indices (subtract 1 for 0-based array)
+      let outboundFlightIndex = outboundFlightMatch ? parseInt(outboundFlightMatch[1]) - 1 : 0;
+      let returnFlightIndex = returnFlightMatch ? parseInt(returnFlightMatch[1]) - 1 : 0;
       let hotelIndex = hotelMatch ? parseInt(hotelMatch[1]) - 1 : 0;
       
       // Validate indices
-      if (flightIndex < 0 || flightIndex >= flights.length) {
-        flightIndex = 0; // Default to first
+      if (outboundFlightIndex < 0 || outboundFlightIndex >= outboundFlights.length) {
+        outboundFlightIndex = 0;
+      }
+      if (returnFlightIndex < 0 || returnFlightIndex >= returnFlights.length) {
+        returnFlightIndex = 0;
       }
       if (hotelIndex < 0 || hotelIndex >= stays.length) {
-        hotelIndex = 0; // Default to first
+        hotelIndex = 0;
       }
       
       // Get the actual objects
-      const recommendedFlight = flights[flightIndex];
+      const recommendedOutboundFlight = outboundFlights[outboundFlightIndex];
+      const recommendedReturnFlight = returnFlights[returnFlightIndex];
       const recommendedHotel = stays[hotelIndex];
       
-      // Calculate budget analysis
-      const budgetAnalysis = this.calculateBudgetAnalysis(recommendedFlight, recommendedHotel, userDetails);
+      // FIXED: Better validation of selected objects
+      if (!recommendedOutboundFlight) {
+        throw new Error('Outbound flight recommendation could not be resolved');
+      }
       
-      return {
-        recommended_flight: recommendedFlight,
+      if (!recommendedReturnFlight) {
+        throw new Error('Return flight recommendation could not be resolved');
+      }
+      
+      if (!recommendedHotel) {
+        throw new Error('Hotel recommendation could not be resolved');
+      }
+      
+      // Calculate budget analysis with both flights
+      const budgetAnalysis = this.calculateBudgetAnalysisWithTwoFlights(
+        recommendedOutboundFlight, 
+        recommendedReturnFlight, 
+        recommendedHotel, 
+        userDetails
+      );
+      
+      const result = {
+        recommended_outbound_flight: recommendedOutboundFlight,
+        recommended_return_flight: recommendedReturnFlight,
         recommended_hotel: recommendedHotel,
-        flight_reason: flightReasonMatch ? flightReasonMatch[1].trim() : 'Selected based on optimal price and timing.',
+        outbound_flight_reason: outboundFlightReasonMatch ? outboundFlightReasonMatch[1].trim() : 'Selected based on optimal price and timing.',
+        return_flight_reason: returnFlightReasonMatch ? returnFlightReasonMatch[1].trim() : 'Selected based on optimal price and timing.',
         hotel_reason: hotelReasonMatch ? hotelReasonMatch[1].trim() : 'Selected based on rating and location.',
         budget_analysis: budgetAnalysis,
         ai_provider: this.provider,
-        ai_model: this.model
-      };
-    } catch (error) {
-      console.error('Error parsing AI response:', error);
-      // Fallback to algorithmic selection
-      const recommendedFlight = this.selectBestFlightObject(flights);
-      const recommendedHotel = this.selectBestStayObject(stays);
-      const budgetAnalysis = this.calculateBudgetAnalysis(recommendedFlight, recommendedHotel, userDetails);
-      
-      return {
-        recommended_flight: recommendedFlight,
-        recommended_hotel: recommendedHotel,
-        flight_reason: 'AI parsing failed - selected based on price and timing algorithm.',
-        hotel_reason: 'AI parsing failed - selected based on rating algorithm.',
-        budget_analysis: budgetAnalysis,
-        ai_provider: this.provider,
         ai_model: this.model,
-        parsing_error: true
+        full_ai_response: aiText,
+        parsing_successful: true
       };
+      
+      return result;
+    } catch (error) {
+      // Enhanced fallback
+      throw new Error(`Parsing error: ${error.message}`);
     }
   }
 
-  // Calculate budget analysis for recommended flight and stay
-  calculateBudgetAnalysis(recommendedFlight, recommendedHotel, userDetails) {
-    if (!recommendedFlight || !recommendedHotel || !userDetails.budget) {
+  // Enhanced API call with better error handling
+  async callGemini(prompt) {
+    if (!this.geminiApiKey) {
+      throw new Error('Gemini API key not provided. Please set GEMINI_API_KEY environment variable or pass it in config.');
+    }
+
+    try {
+      const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+      
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': this.geminiApiKey
+      };
+      
+      const payload = {
+        "contents": [
+          {
+            "parts": [
+              {
+                "text": prompt
+              }
+            ]
+          }
+        ],
+        "generationConfig": {
+          "temperature": 0.3, // Lower temperature for more consistent parsing
+          "topP": 0.9,
+          "maxOutputTokens": 3000, // Increased for more detailed responses
+          "candidateCount": 1
+        }
+      };
+
+      const response = await axios.post(url, payload, { 
+        headers,
+        timeout: 30000 // 30 second timeout
+      });
+
+      // Extract the generated text from Gemini's response
+      let recommendation = '';
+      if (response.data && response.data.candidates && response.data.candidates.length > 0) {
+        const candidate = response.data.candidates[0];
+        
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          recommendation = candidate.content.parts[0].text;
+        }
+      }
+
+      if (!recommendation) {
+        throw new Error('No valid response from Gemini API - empty recommendation');
+      }
+
+      return {
+        recommendation: recommendation,
+        model: this.model,
+        provider: this.provider
+      };
+    } catch (error) {
+      // Provide more specific error messages
+      if (error.response?.status === 400) {
+        throw new Error(`Invalid request to Gemini API: ${error.response.data?.error?.message || error.message}`);
+      } else if (error.response?.status === 401) {
+        throw new Error('Invalid or missing Gemini API key');
+      } else if (error.response?.status === 403) {
+        throw new Error('Gemini API access forbidden - check your API key permissions');
+      } else if (error.response?.status === 429) {
+        throw new Error('Gemini API rate limit exceeded - please try again later');
+      } else {
+        throw new Error(`Failed to generate recommendations using Gemini: ${error.message}`);
+      }
+    }
+  }
+
+  // FIXED: Better budget analysis calculation
+  calculateBudgetAnalysisWithTwoFlights(outboundFlight, returnFlight, recommendedHotel, userDetails) {
+    // Validate input parameters
+    if (!outboundFlight || !returnFlight || !recommendedHotel) {
       return {
         total_cost: 0,
-        flight_cost: 0,
+        outbound_flight_cost: 0,
+        return_flight_cost: 0,
+        total_flight_cost: 0,
         accommodation_cost: 0,
-        user_budget: userDetails.budget || 0,
+        user_budget: userDetails?.budget || 0,
         on_budget: false,
-        budget_feedback: 'Unable to calculate budget analysis due to missing data.',
+        budget_feedback: 'Unable to calculate budget analysis due to missing flight or hotel data.',
         remaining_budget: 0,
         budget_percentage_used: 0
       };
     }
 
-    // Calculate costs
-    const flightCost = recommendedFlight.price || 0;
-    const accommodationCost = recommendedHotel.total_price || 0;
-    const totalCost = flightCost + accommodationCost;
+    if (!userDetails?.budget) {
+      return {
+        total_cost: 0,
+        outbound_flight_cost: 0,
+        return_flight_cost: 0,
+        total_flight_cost: 0,
+        accommodation_cost: 0,
+        user_budget: 0,
+        on_budget: false,
+        budget_feedback: 'Unable to calculate budget analysis - no budget provided.',
+        remaining_budget: 0,
+        budget_percentage_used: 0
+      };
+    }
+
+    // Calculate costs with proper fallbacks
+    const outboundFlightCost = parseFloat(outboundFlight.price) || 0;
+    const returnFlightCost = parseFloat(returnFlight.price) || 0;
+    const totalFlightCost = outboundFlightCost + returnFlightCost;
+    const accommodationCost = parseFloat(recommendedHotel.total_price) || 0;
+    const totalCost = totalFlightCost + accommodationCost;
     
     // Budget analysis
-    const userBudget = userDetails.budget;
+    const userBudget = parseFloat(userDetails.budget) || 0;
     const onBudget = totalCost <= userBudget;
     const remainingBudget = userBudget - totalCost;
-    const budgetPercentageUsed = (totalCost / userBudget) * 100;
+    const budgetPercentageUsed = userBudget > 0 ? (totalCost / userBudget) * 100 : 100;
     
     // Generate feedback
     let budgetFeedback;
@@ -204,7 +417,7 @@ ${index + 1}. ${stay.name}
     } else {
       const overage = Math.abs(remainingBudget);
       if (overage > userBudget * 0.2) {
-        budgetFeedback = `Your selections exceed budget by $${overage.toFixed(2)}. The budget you entered is a bit non realistic for the place you want to travel too. Try to obtain a higher budget.`;
+        budgetFeedback = `Your selections exceed budget by $${overage.toFixed(2)}. The budget you entered may be unrealistic for this destination. Consider increasing your budget.`;
       } else {
         budgetFeedback = `Your selections are slightly over budget by $${overage.toFixed(2)}. You might want to adjust your budget or look for alternatives.`;
       }
@@ -212,169 +425,146 @@ ${index + 1}. ${stay.name}
 
     return {
       total_cost: parseFloat(totalCost.toFixed(2)),
-      flight_cost: parseFloat(flightCost.toFixed(2)),
+      outbound_flight_cost: parseFloat(outboundFlightCost.toFixed(2)),
+      return_flight_cost: parseFloat(returnFlightCost.toFixed(2)),
+      total_flight_cost: parseFloat(totalFlightCost.toFixed(2)),
       accommodation_cost: parseFloat(accommodationCost.toFixed(2)),
       user_budget: userBudget,
       on_budget: onBudget,
       budget_feedback: budgetFeedback,
       remaining_budget: parseFloat(remainingBudget.toFixed(2)),
       budget_percentage_used: parseFloat(budgetPercentageUsed.toFixed(1)),
-      currency: recommendedFlight.currency || 'USD'
+      currency: outboundFlight.currency || 'USD'
     };
   }
 
-  // Select best flight and return the actual object
+  // FIXED: Better flight selection algorithm
   selectBestFlightObject(flights) {
-    if (!flights || flights.length === 0) return null;
+    if (!flights || flights.length === 0) {
+      return null;
+    }
     
     // Sort by a combination of price and departure time preference
     const scoredFlights = flights.map(flight => {
-      const priceScore = 1 / (flight.price || 1);
+      const price = parseFloat(flight.price) || 999999;
+      const priceScore = price > 0 ? 1000 / price : 0; // Higher score for lower price
       const timeScore = this.getTimeScore(flight.departure_time);
       const totalScore = (priceScore * 0.7) + (timeScore * 0.3);
+      
       return { flight, score: totalScore };
     });
     
-    return scoredFlights.sort((a, b) => b.score - a.score)[0].flight;
+    const bestFlight = scoredFlights.sort((a, b) => b.score - a.score)[0].flight;
+    
+    return bestFlight;
   }
 
-  // Select best stay and return the actual object
+  // FIXED: Better stay selection algorithm
   selectBestStayObject(stays) {
-    if (!stays || stays.length === 0) return null;
+    if (!stays || stays.length === 0) {
+      return null;
+    }
     
-    // Sort by rating primarily
+    // Sort by rating primarily, then by price
     const scoredStays = stays.map(stay => {
       let score = 0;
-      if (stay.rating) {
-        score = stay.rating;
+      
+      // Rating score (weighted heavily)
+      if (stay.rating && stay.rating > 0) {
+        score = parseFloat(stay.rating) * 10; // Weight rating heavily
+      } else {
+        score = 50; // Default score for unrated properties
       }
+      
+      // Price score (prefer reasonable prices, penalize both free and very expensive)
+      const price = parseFloat(stay.total_price) || 0;
+      if (price === 0) {
+        // Free stays are suspicious, lower the score but don't eliminate
+        score += 20;
+      } else if (price < 500) {
+        // Reasonable price range
+        score += (500 - price) / 10; // Bonus for lower price
+      } else {
+        // Expensive stays get penalty
+        score -= (price - 500) / 20;
+      }
+      
       return { stay, score };
     });
     
-    return scoredStays.sort((a, b) => b.score - a.score)[0].stay;
-  }
-
-  // Call Ollama API (for local Llama 2)
-  async callOllama(prompt) {
-    try {
-      const response = await axios.post(`${this.ollamaUrl}/api/generate`, {
-        model: this.model,
-        prompt: prompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-          max_tokens: 2000
-        }
-      });
-
-      return {
-        recommendation: response.data.response,
-        model: this.model,
-        provider: 'ollama'
-      };
-    } catch (error) {
-      console.error('Ollama API error:', error.message);
-      throw new Error('Failed to generate recommendations using Ollama');
-    }
-  }
-
-  // Call Replicate API (for cloud-based Llama 2)
-  async callReplicate(prompt) {
-    if (!this.replicateApiToken) {
-      throw new Error('Replicate API token not provided');
-    }
-
-    try {
-      // Create prediction
-      const createResponse = await axios.post(
-        'https://api.replicate.com/v1/predictions',
-        {
-          version: 'a16z-infra/llama-2-70b-chat:2796ee9483c3fd7aa2e171d38f4ca12251a30609463dcfd4cd76703f22e96cdf',
-          input: {
-            prompt: prompt,
-            temperature: 0.7,
-            top_p: 0.9,
-            max_length: 2000,
-            repetition_penalty: 1
-          }
-        },
-        {
-          headers: {
-            'Authorization': `Token ${this.replicateApiToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      const predictionId = createResponse.data.id;
-
-      // Poll for results
-      let prediction = createResponse.data;
-      while (prediction.status !== 'succeeded' && prediction.status !== 'failed') {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const statusResponse = await axios.get(
-          `https://api.replicate.com/v1/predictions/${predictionId}`,
-          {
-            headers: {
-              'Authorization': `Token ${this.replicateApiToken}`
-            }
-          }
-        );
-        
-        prediction = statusResponse.data;
-      }
-
-      if (prediction.status === 'failed') {
-        throw new Error('Replicate prediction failed');
-      }
-
-      console.log('Replicate prediction completed successfully:', prediction.output);
-
-      return {
-        recommendation: prediction.output.join(''),
-        model: 'llama-2-70b',
-        provider: 'replicate'
-      };
-    } catch (error) {
-      console.error('Replicate API error:', error.message);
-      throw new Error('Failed to generate recommendations using Replicate');
-    }
+    const bestStay = scoredStays.sort((a, b) => b.score - a.score)[0].stay;
+    
+    return bestStay;
   }
 
   // Helper functions
   calculateDuration(departure, arrival) {
-    const dep = new Date(`2000-01-01T${departure}`);
-    const arr = new Date(`2000-01-01T${arrival}`);
-    const diff = arr - dep;
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
+    if (!departure || !arrival) return 'Duration unknown';
+    
+    try {
+      const dep = new Date(`2000-01-01T${departure}`);
+      const arr = new Date(`2000-01-01T${arrival}`);
+      let diff = arr - dep;
+      
+      // Handle overnight flights
+      if (diff < 0) {
+        diff += 24 * 60 * 60 * 1000; // Add 24 hours
+      }
+      
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      return `${hours}h ${minutes}m`;
+    } catch (error) {
+      return 'Duration unknown';
+    }
   }
 
+  getTimeScore(time) {
+    if (!time) return 0.3;
+    
+    try {
+      const hour = parseInt(time.split(':')[0]);
+      if (hour >= 8 && hour <= 12) return 1.0; // Morning: best
+      if (hour >= 13 && hour <= 16) return 0.8; // Early afternoon: good
+      if (hour >= 6 && hour <= 7) return 0.6; // Early morning: okay
+      if (hour >= 17 && hour <= 20) return 0.5; // Evening: less preferred
+      return 0.3; // Night/very early: least preferred
+    } catch (error) {
+      return 0.3;
+    }
+  }
+
+  // Additional utility methods (keeping the rest of your existing methods)
   calculateTripDuration(startDate, endDate) {
     const start = new Date(startDate);
     const end = new Date(endDate);
     return Math.ceil((end - start) / (1000 * 60 * 60 * 24));
   }
 
-  // Generate a quick summary without AI
   generateQuickSummary(userDetails, flights, stays) {
-    // Select the best flight and hotel objects
-    const bestFlight = this.selectBestFlightObject(flights);
+    const outboundFlights = flights.filter(flight => !flight.is_return_flight);
+    const returnFlights = flights.filter(flight => flight.is_return_flight);
+    
+    const bestOutboundFlight = this.selectBestFlightObject(outboundFlights);
+    const bestReturnFlight = this.selectBestFlightObject(returnFlights);
     const bestStay = this.selectBestStayObject(stays);
     
-    // Calculate budget analysis
-    const budgetAnalysis = this.calculateBudgetAnalysis(bestFlight, bestStay, userDetails);
+    const budgetAnalysis = this.calculateBudgetAnalysisWithTwoFlights(
+      bestOutboundFlight, 
+      bestReturnFlight, 
+      bestStay, 
+      userDetails
+    );
 
     return {
       summary: {
         destination: `${userDetails.destination_city}, ${userDetails.destination_country}`,
         dates: `${userDetails.dates_start} to ${userDetails.dates_end}`,
-        recommended_flight: bestFlight,
+        recommended_outbound_flight: bestOutboundFlight,
+        recommended_return_flight: bestReturnFlight,
         recommended_hotel: bestStay,
-        flight_reason: 'Selected based on optimal balance of price and departure time.',
+        outbound_flight_reason: 'Selected based on optimal balance of price and departure time.',
+        return_flight_reason: 'Selected based on optimal balance of price and departure time.',
         hotel_reason: 'Selected based on highest rating and suitable accommodation type.',
         budget_analysis: budgetAnalysis,
         quickTips: this.getDestinationTips(userDetails.destination_country)
@@ -382,17 +572,6 @@ ${index + 1}. ${stay.name}
     };
   }
 
-  // Helper to score departure times (prefer morning/early afternoon)
-  getTimeScore(time) {
-    const hour = parseInt(time.split(':')[0]);
-    if (hour >= 8 && hour <= 12) return 1.0; // Morning: best
-    if (hour >= 13 && hour <= 16) return 0.8; // Early afternoon: good
-    if (hour >= 6 && hour <= 7) return 0.6; // Early morning: okay
-    if (hour >= 17 && hour <= 20) return 0.5; // Evening: less preferred
-    return 0.3; // Night/very early: least preferred
-  }
-
-  // Match accommodation type to travel style
   getStyleMatch(accommodationType, travelStyle) {
     const styleMap = {
       'luxury': { 'hotel': 1.0, 'apartment': 0.7, 'guesthouse': 0.5, 'hostel': 0.2 },
@@ -403,7 +582,7 @@ ${index + 1}. ${stay.name}
       'family': { 'apartment': 1.0, 'hotel': 0.8, 'guesthouse': 0.5, 'hostel': 0.2 }
     };
     
-    const style = travelStyle.toLowerCase();
+    const style = travelStyle?.toLowerCase();
     return styleMap[style]?.[accommodationType] || 0.5;
   }
 
@@ -415,6 +594,12 @@ ${index + 1}. ${stay.name}
         'Don\'t miss: Albanian Riviera beaches',
         'Local transport: Buses are affordable'
       ],
+      'austria': [
+        'Currency: Euro (EUR)',
+        'Best time: May-September for sightseeing, December-March for skiing',
+        'Don\'t miss: Schönbrunn Palace, Salzburg, Hallstatt',
+        'Local transport: Excellent public transport system'
+      ],
       'default': [
         'Check visa requirements',
         'Get travel insurance',
@@ -423,7 +608,7 @@ ${index + 1}. ${stay.name}
       ]
     };
 
-    return tips[country.toLowerCase()] || tips.default;
+    return tips[country?.toLowerCase()] || tips.default;
   }
 }
 

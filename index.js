@@ -11,12 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 const upload = multer();
 
-const aiService = new AITravelRecommendationService({
-  provider: process.env.AI_PROVIDER || 'replicate',
-  ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-  replicateApiToken: process.env.REPLICATE_API_TOKEN,
-  model: process.env.AI_MODEL || 'llama2'
-});
+const aiService = new AITravelRecommendationService();
 
 app.use(express.json());
 
@@ -105,10 +100,12 @@ app.post('/user-details', upload.none(), async (req, res) => {
       userDetails,
       flights: flightData,
       stays: stays,
-      ...(aiRecommendations && { 
-        recommended_flight: aiRecommendations.recommended_flight,
+      ...(aiRecommendations && {
+        recommended_outbound_flight: aiRecommendations.recommended_outbound_flight,
+        recommended_return_flight: aiRecommendations.recommended_return_flight,
         recommended_hotel: aiRecommendations.recommended_hotel,
-        flight_reason: aiRecommendations.flight_reason,
+        outbound_flight_reason: aiRecommendations.outbound_flight_reason,
+        return_flight_reason: aiRecommendations.return_flight_reason,
         hotel_reason: aiRecommendations.hotel_reason,
         budget_analysis: aiRecommendations.budget_analysis,
         ai_analysis: {
@@ -117,7 +114,7 @@ app.post('/user-details', upload.none(), async (req, res) => {
           parsing_error: aiRecommendations.parsing_error || false
         }
       }),
-      ...(quickSummary && !aiRecommendations && { 
+      ...(quickSummary && !aiRecommendations && {
         recommended_flight: quickSummary.summary.recommended_flight,
         recommended_hotel: quickSummary.summary.recommended_hotel,
         flight_reason: quickSummary.summary.flight_reason,
@@ -138,9 +135,9 @@ app.post('/user-details', upload.none(), async (req, res) => {
 
   } catch (error) {
     console.error('Error processing request:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -187,9 +184,9 @@ app.post('/flights', upload.none(), async (req, res) => {
     };
 
     console.log('Fetching flights for:', userDetails);
-    
+
     const flightData = await parseFlightData(userDetails, "trip-1");
-    
+
     console.log(`Found ${flightData.length} flights`);
 
     res.json({
@@ -202,9 +199,9 @@ app.post('/flights', upload.none(), async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching flights:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch flights',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -245,9 +242,9 @@ app.post('/stays', upload.none(), async (req, res) => {
     };
 
     console.log('Fetching stays for:', userDetails);
-    
+
     const stays = await parseBookingResponseToStays(userDetails);
-    
+
     console.log(`Found ${stays.length} stays`);
 
     res.json({
@@ -260,9 +257,9 @@ app.post('/stays', upload.none(), async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching stays:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to fetch stays',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -279,7 +276,7 @@ app.post('/ai-recommendations', upload.none(), async (req, res) => {
     }
 
     console.log('Generating AI recommendations for provided data...');
-    
+
     const recommendations = await aiService.generateRecommendations(
       userDetails,
       flights,
@@ -295,9 +292,9 @@ app.post('/ai-recommendations', upload.none(), async (req, res) => {
 
   } catch (error) {
     console.error('Error generating AI recommendations:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to generate AI recommendations',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -325,7 +322,7 @@ app.listen(PORT, () => {
   console.log(`  - POST http://localhost:${PORT}/stays`);
   console.log(`  - POST http://localhost:${PORT}/ai-recommendations`);
   console.log(`  - GET  http://localhost:${PORT}/health`);
-  console.log(`AI Provider: ${process.env.AI_PROVIDER || 'ollama'}`);
+  console.log(`AI Provider: ${'replicate'}`);
 });
 
 module.exports = app;
