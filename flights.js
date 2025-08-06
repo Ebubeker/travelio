@@ -117,6 +117,7 @@ async function getFlights(flightDetails) {
 }
 
 async function parseFlightData(flightDetails, tripId) {
+  console.log(flightDetails)
   try {
     const apiResponse = await getFlights(flightDetails);
     
