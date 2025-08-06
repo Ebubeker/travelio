@@ -27,6 +27,13 @@ app.post('/user-details', upload.none(), async (req, res) => {
       travel_interests,
       current_city,
       current_country,
+      flightClass = 'economy',
+      passengers = {
+        adults: 1,
+        children: 0,
+        infants: 0
+      },
+      nr_rooms = 1,
       enable_ai = true
     } = req.body;
 
@@ -49,9 +56,19 @@ app.post('/user-details', upload.none(), async (req, res) => {
       });
     }
 
+    // class: "economy", "premium economy", "business", "first"
+    /* passengers: {
+      adults: 1,
+      children: 0,
+      infants: 0
+    } */
+
     const userDetails = {
       destination_city,
       destination_country,
+      flightClass,
+      passengers,
+      nr_rooms,
       budget: parseFloat(budget),
       dates_start,
       dates_end,
@@ -61,9 +78,6 @@ app.post('/user-details', upload.none(), async (req, res) => {
       ...(travel_interests && { travel_interests })
     };
 
-    // console.log('Processing travel request for:', userDetails);
-
-    // Fetch flight and stay data in parallel
     console.log('Fetching flights and stays...');
     const [flightData, stays] = await Promise.all([
       parseFlightData(userDetails, "trip-1"),
@@ -72,7 +86,6 @@ app.post('/user-details', upload.none(), async (req, res) => {
 
     console.log(`Found ${flightData.length} flights and ${stays.length} stays`);
 
-    // Generate AI recommendations if enabled
     let aiRecommendations = null;
     let quickSummary = null;
 
@@ -87,15 +100,12 @@ app.post('/user-details', upload.none(), async (req, res) => {
         console.log('AI recommendations generated successfully');
       } catch (aiError) {
         console.error('AI recommendation error:', aiError.message);
-        // Fall back to quick summary if AI fails
         quickSummary = aiService.generateQuickSummary(userDetails, flightData, stays);
       }
     } else {
-      // Generate quick summary without AI
       quickSummary = aiService.generateQuickSummary(userDetails, flightData, stays);
     }
 
-    // Prepare response
     const response = {
       userDetails,
       flights: flightData,
@@ -152,7 +162,13 @@ app.post('/flights', upload.none(), async (req, res) => {
       dates_end,
       current_city,
       current_country,
-      budget
+      budget,
+      flightClass = 'economy',
+      passengers = {
+        adults: 1,
+        children: 0,
+        infants: 0
+      },
     } = req.body;
 
     const requiredFields = [
@@ -180,6 +196,8 @@ app.post('/flights', upload.none(), async (req, res) => {
       dates_end,
       current_city,
       current_country,
+      flightClass,
+      passengers,
       ...(budget && { budget: parseFloat(budget) })
     };
 
@@ -214,7 +232,13 @@ app.post('/stays', upload.none(), async (req, res) => {
       destination_country,
       dates_start,
       dates_end,
-      budget
+      budget,
+      passengers = {
+        adults: 1,
+        children: 0,
+        infants: 0
+      },
+      nr_rooms = 1
     } = req.body;
 
     const requiredFields = [
@@ -238,6 +262,8 @@ app.post('/stays', upload.none(), async (req, res) => {
       destination_country,
       dates_start,
       dates_end,
+      passengers,
+      nr_rooms,
       ...(budget && { budget: parseFloat(budget) })
     };
 

@@ -1,20 +1,13 @@
 const axios = require('axios');
 
-// const userDetails = {
-//   destination_city,
-//   destination_country,
-//   budget,
-//   dates_start,
-//   dates_end,
-//   current_city,
-//   current_country,
-//   ...(travel_style && { travel_style }),
-//   ...(travel_interests && { travel_interests })
-// };
+const cabin_class = {
+  "economy": "ECONOMY",
+  "premium_economy": "PREMIUM_ECONOMY",
+  "business": "BUSINESS",
+  "first": "FIRST_CLASS",
+}
 
 async function getFlights(flightDetails) {
-
-  console.log(flightDetails)
   try {
     const response = await axios.request({
       method: 'post',
@@ -44,20 +37,20 @@ async function getFlights(flightDetails) {
               }
             },
             "passengers": {
-              "adults": 1,
-              "children": 0,
-              "infants": 0,
+              "adults": flightDetails.passengers.adults,
+              "children": flightDetails.passengers.children,
+              "infants": flightDetails.passengers.infants,
               "adultsHoldBags": [
-                0
+                ...Array.from({ length: flightDetails.passengers.adults }).map(() => 0)
               ],
               "adultsHandBags": [
-                0
+                ...Array.from({ length: flightDetails.passengers.adults }).map(() => 0)
               ],
               "childrenHoldBags": [],
               "childrenHandBags": []
             },
             "cabinClass": {
-              "cabinClass": "ECONOMY",
+              "cabinClass": cabin_class[flightDetails.flightClass],
               "applyMixedClasses": false
             }
           },
@@ -115,7 +108,6 @@ async function getFlights(flightDetails) {
     })
 
 
-    // console.log(response.data )
     return response.data;
   } catch (error) {
     console.error(error);
@@ -127,77 +119,265 @@ async function getFlights(flightDetails) {
 async function parseFlightData(flightDetails, tripId) {
   try {
     const apiResponse = await getFlights(flightDetails);
-  
+    
     const flights = [];
     const itineraries = apiResponse.data.returnItineraries.itineraries;
-    
+
     itineraries.forEach((itinerary, index) => {
       const bookingUrl = itinerary.bookingOptions?.edges?.[0]?.node?.bookingUrl || null;
       const fullBookingUrl = bookingUrl ? `https://www.kiwi.com${bookingUrl}` : null;
-      
+      const totalPrice = parseFloat(itinerary.price.amount);
+
+      // Process outbound journey
       if (itinerary.outbound && itinerary.outbound.sectorSegments) {
-        itinerary.outbound.sectorSegments.forEach((segment, segmentIndex) => {
-          const flight = segment.segment;
-          
-          flights.push({
-            id: null,
-            trip_id: tripId,
-            flight_number: `${flight.carrier.code}${flight.code}`,
-            airline: flight.carrier.name,
-            departure_date: new Date(flight.source.localTime).toISOString().split('T')[0],
-            departure_time: new Date(flight.source.localTime).toTimeString().split(' ')[0],
-            arrival_date: new Date(flight.destination.localTime).toISOString().split('T')[0],
-            arrival_time: new Date(flight.destination.localTime).toTimeString().split(' ')[0],
-            origin_airport: flight.source.station.code,
-            origin_city: flight.source.station.city.name,
-            destination_airport: flight.destination.station.code,
-            destination_city: flight.destination.station.city.name,
-            price: parseFloat(itinerary.price.amount),
+        const outboundFlight = createJourneyRecord(
+          itinerary.outbound.sectorSegments,
+          {
+            tripId,
+            totalPrice,
             currency: 'USD',
-            booking_reference: itinerary.shareId,
-            seat_number: null,
-            notes: `Booking URL: ${fullBookingUrl}`,
-            status: 'available',
-            is_return_flight: false,
-            created_at: new Date().toISOString()
-          });
-        });
+            bookingReference: itinerary.shareId,
+            bookingUrl: fullBookingUrl,
+            isReturnFlight: false,
+            itineraryIndex: index
+          }
+        );
+        
+        if (outboundFlight) {
+          flights.push(outboundFlight);
+        }
       }
-      
+
+      // Process inbound journey (return flight)
       if (itinerary.inbound && itinerary.inbound.sectorSegments) {
-        itinerary.inbound.sectorSegments.forEach((segment, segmentIndex) => {
-          const flight = segment.segment;
-          
-          flights.push({
-            id: null, 
-            trip_id: tripId,
-            flight_number: `${flight.carrier.code}${flight.code}`,
-            airline: flight.carrier.name,
-            departure_date: new Date(flight.source.localTime).toISOString().split('T')[0],
-            departure_time: new Date(flight.source.localTime).toTimeString().split(' ')[0],
-            arrival_date: new Date(flight.destination.localTime).toISOString().split('T')[0],
-            arrival_time: new Date(flight.destination.localTime).toTimeString().split(' ')[0],
-            origin_airport: flight.source.station.code,
-            origin_city: flight.source.station.city.name,
-            destination_airport: flight.destination.station.code,
-            destination_city: flight.destination.station.city.name,
-            price: parseFloat(itinerary.price.amount),
+        const inboundFlight = createJourneyRecord(
+          itinerary.inbound.sectorSegments,
+          {
+            tripId,
+            totalPrice,
             currency: 'USD',
-            booking_reference: itinerary.shareId,
-            seat_number: null,
-            notes: `Return flight. Booking URL: ${fullBookingUrl}`,
-            status: 'available',
-            is_return_flight: true,
-            created_at: new Date().toISOString()
-          });
-        });
+            bookingReference: itinerary.shareId,
+            bookingUrl: fullBookingUrl,
+            isReturnFlight: true,
+            itineraryIndex: index
+          }
+        );
+        
+        if (inboundFlight) {
+          flights.push(inboundFlight);
+        }
       }
     });
-    
+
     return flights;
   } catch (error) {
-    console.log(error)
+    console.log(error);
     return null;
+  }
+}
+
+function createJourneyRecord(sectorSegments, options) {
+  if (!sectorSegments || sectorSegments.length === 0) {
+    return null;
+  }
+
+  const {
+    tripId,
+    totalPrice,
+    currency,
+    bookingReference,
+    bookingUrl,
+    isReturnFlight,
+    itineraryIndex
+  } = options;
+
+  // Get first and last segments for overall journey info
+  const firstSegment = sectorSegments[0].segment;
+  const lastSegment = sectorSegments[sectorSegments.length - 1].segment;
+
+  // Calculate total journey duration
+  const departureTime = new Date(firstSegment.source.localTime);
+  const arrivalTime = new Date(lastSegment.destination.localTime);
+  const totalDurationMinutes = (arrivalTime - departureTime) / (1000 * 60);
+
+  // Build transit information
+  const transitInfo = buildTransitInfo(sectorSegments);
+  
+  // Build flight segments details
+  const segmentDetails = sectorSegments.map((sectorSegment, segmentIndex) => {
+    const segment = sectorSegment.segment;
+    const layover = sectorSegment.layover;
+    
+    return {
+      segmentNumber: segmentIndex + 1,
+      flightNumber: `${segment.carrier.code}${segment.code}`,
+      airline: segment.carrier.name,
+      departureAirport: segment.source.station.code,
+      departureCity: segment.source.station.city.name,
+      departureTime: new Date(segment.source.localTime).toISOString(),
+      arrivalAirport: segment.destination.station.code,
+      arrivalCity: segment.destination.station.city.name,
+      arrivalTime: new Date(segment.destination.localTime).toISOString(),
+      duration: segment.duration,
+      cabinClass: segment.cabinClass,
+      layover: layover ? {
+        duration: layover.duration,
+        durationFormatted: formatDuration(layover.duration),
+        isBaggageRecheck: layover.isBaggageRecheck,
+        isWalkingDistance: layover.isWalkingDistance
+      } : null
+    };
+  });
+
+  // Create comprehensive flight record
+  return {
+    id: null,
+    trip_id: tripId,
+    itinerary_index: itineraryIndex,
+    
+    // Overall journey information
+    flight_number: createFlightNumberString(sectorSegments),
+    airline: getMainAirline(sectorSegments),
+    
+    // Departure information (first segment)
+    departure_date: departureTime.toISOString().split('T')[0],
+    departure_time: departureTime.toTimeString().split(' ')[0],
+    origin_airport: firstSegment.source.station.code,
+    origin_city: firstSegment.source.station.city.name,
+    
+    // Arrival information (last segment)
+    arrival_date: arrivalTime.toISOString().split('T')[0],
+    arrival_time: arrivalTime.toTimeString().split(' ')[0],
+    destination_airport: lastSegment.destination.station.code,
+    destination_city: lastSegment.destination.station.city.name,
+    
+    // Journey details
+    total_duration: totalDurationMinutes,
+    total_duration_formatted: formatDuration(totalDurationMinutes * 60), // Convert back to seconds for formatting
+    segments_count: sectorSegments.length,
+    is_direct: sectorSegments.length === 1,
+    
+    // Transit information
+    transit_airports: transitInfo.airports,
+    transit_cities: transitInfo.cities,
+    transit_times: transitInfo.times,
+    transit_summary: transitInfo.summary,
+    
+    // Pricing and booking
+    price: totalPrice,
+    currency: currency,
+    booking_reference: bookingReference,
+    
+    // Additional details
+    seat_number: null,
+    notes: createNotesWithTransitInfo(sectorSegments, bookingUrl, isReturnFlight),
+    status: 'available',
+    is_return_flight: isReturnFlight,
+    
+    // Detailed segment information
+    segments: segmentDetails,
+    
+    created_at: new Date().toISOString()
+  };
+}
+
+function buildTransitInfo(sectorSegments) {
+  if (sectorSegments.length <= 1) {
+    return {
+      airports: [],
+      cities: [],
+      times: [],
+      summary: 'Direct flight'
+    };
+  }
+
+  const transitAirports = [];
+  const transitCities = [];
+  const transitTimes = [];
+
+  // Get transit information from layovers
+  for (let i = 0; i < sectorSegments.length - 1; i++) {
+    const currentSegment = sectorSegments[i].segment;
+    const nextLayover = sectorSegments[i].layover;
+    
+    const transitAirport = currentSegment.destination.station.code;
+    const transitCity = currentSegment.destination.station.city.name;
+    const transitDuration = nextLayover ? nextLayover.duration : 0;
+    
+    transitAirports.push(transitAirport);
+    transitCities.push(transitCity);
+    transitTimes.push({
+      airport: transitAirport,
+      city: transitCity,
+      duration: transitDuration,
+      durationFormatted: formatDuration(transitDuration)
+    });
+  }
+
+  // Create summary string
+  const summary = transitAirports.length > 0 
+    ? `Transit via ${transitAirports.join(', ')} (${transitTimes.map(t => `${t.airport}: ${t.durationFormatted}`).join(', ')})`
+    : 'Direct flight';
+
+  return {
+    airports: transitAirports,
+    cities: transitCities,
+    times: transitTimes,
+    summary: summary
+  };
+}
+
+function createFlightNumberString(sectorSegments) {
+  return sectorSegments
+    .map(segment => `${segment.segment.carrier.code}${segment.segment.code}`)
+    .join(' → ');
+}
+
+function getMainAirline(sectorSegments) {
+  // Get the airline of the first segment, or find the most common airline
+  if (sectorSegments.length === 1) {
+    return sectorSegments[0].segment.carrier.name;
+  }
+  
+  // Count airlines
+  const airlineCounts = {};
+  sectorSegments.forEach(segment => {
+    const airline = segment.segment.carrier.name;
+    airlineCounts[airline] = (airlineCounts[airline] || 0) + 1;
+  });
+  
+  // Return the most frequent airline, or first one if tied
+  const sortedAirlines = Object.entries(airlineCounts)
+    .sort(([,a], [,b]) => b - a);
+  
+  return sortedAirlines[0][0];
+}
+
+function createNotesWithTransitInfo(sectorSegments, bookingUrl, isReturnFlight) {
+  let notes = isReturnFlight ? 'Return flight. ' : '';
+  
+  if (sectorSegments.length > 1) {
+    const transitInfo = buildTransitInfo(sectorSegments);
+    notes += `Multi-segment flight: ${transitInfo.summary}. `;
+  }
+  
+  if (bookingUrl) {
+    notes += `Booking URL: ${bookingUrl}`;
+  }
+  
+  return notes.trim();
+}
+
+function formatDuration(seconds) {
+  if (!seconds || seconds === 0) return '0m';
+  
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  } else {
+    return `${minutes}m`;
   }
 }
 

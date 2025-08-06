@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require('uuid');
 const { getCountryName } = require('./countrynames');
 const randomUA = require('random-useragent')
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const fs = require('fs').promises;
+const path = require('path');
 
 // Add your proxies array at the top
 const proxies = [
@@ -18,11 +20,63 @@ const proxies = [
 ];
 
 // Function to randomly select a proxy
-function getRandomProxy() {
-  return proxies[Math.floor(Math.random() * proxies.length)];
+// function getRandomProxy() {
+//   const selectedProxy = proxies[Math.floor(Math.random() * proxies.length)]
+//   return selectedProxy;
+// }
+
+async function getRandomProxy() {
+  const filePath = path.join(__dirname, 'prevProxies.txt');
+  const maxProxies = 6;
+
+  try {
+    let usedProxies = [];
+
+    // Try to read existing file
+    try {
+      const fileContent = await fs.readFile(filePath, 'utf8');
+      usedProxies = fileContent.trim().split('\n').filter(line => line.trim() !== '');
+    } catch (err) {
+      // File doesn't exist, create empty array
+      usedProxies = [];
+    }
+
+    let selectedProxy;
+    let attempts = 0;
+    const maxAttempts = proxies.length * 2; // Prevent infinite loop
+
+    do {
+      selectedProxy = proxies[Math.floor(Math.random() * proxies.length)];
+      attempts++;
+
+      if (attempts > maxAttempts) {
+        // Fallback: just use any proxy if we can't find an unused one
+        break;
+      }
+    } while (usedProxies.includes(selectedProxy));
+
+    // Handle the proxy list based on current count
+    if (usedProxies.length >= maxProxies) {
+      // Remove first proxy (oldest) and add new one at the end
+      usedProxies.shift();
+      usedProxies.push(selectedProxy);
+    } else {
+      // Just add the new proxy
+      usedProxies.push(selectedProxy);
+    }
+
+    // Write updated list back to file
+    await fs.writeFile(filePath, usedProxies.join('\n') + '\n', 'utf8');
+
+    return selectedProxy;
+
+  } catch (err) {
+    console.error('Error handling proxy file:', err);
+    // Fallback to original behavior if file operations fail
+    return proxies[Math.floor(Math.random() * proxies.length)];
+  }
 }
 
-// Function to parse proxy string
 function parseProxy(proxyString) {
   const [host, port, username, password] = proxyString.split(':');
   return {
@@ -37,8 +91,8 @@ function parseProxy(proxyString) {
 
 const findStays = async (userDetails) => {
 
-  const selectedProxy = getRandomProxy();
-  const proxyConfig = parseProxy(selectedProxy);
+  const selectedProxy = await getRandomProxy();
+  // const proxyConfig = parseProxy(selectedProxy);
 
   const [host, port, username, password] = selectedProxy.split(':');
 
@@ -134,8 +188,6 @@ const findStays = async (userDetails) => {
 
     const searchResponseDestination = await axios.request(searchOptionsDestination);
 
-    console.log("search destination", searchResponseDestination)
-
 
     const searchDestination = searchResponseDestination.data.data.autoCompleteSuggestions.results.find((result => result.destination.destType === 'CITY'));
     // scrapeWithUAOnly('https://www.booking.com/index.html?lang=en-us', userDetails.destination_city, getCountryName(userDetails.destination_country))
@@ -150,6 +202,82 @@ const findStays = async (userDetails) => {
     const endYear = endDate.getFullYear();
     const endMonth = endDate.getMonth() + 1;
     const endDay = endDate.getDate();
+
+    console.log({
+      includeBundle: true,
+      input: {
+        acidCarouselContext: null,
+        childrenAges: [],
+        dates: {
+          checkin: userDetails.dates_start,
+          checkout: userDetails.dates_end
+        },
+        doAvailabilityCheck: false,
+        encodedAutocompleteMeta: null,
+        enableCampaigns: true,
+        filters: {},
+        flexibleDatesConfig: {
+          broadDatesCalendar: {
+            checkinMonths: [],
+            los: [],
+            startWeekdays: []
+          },
+          dateFlexUseCase: 'DATE_RANGE',
+          dateRangeCalendar: {
+            checkin: [userDetails.dates_start],
+            checkout: [userDetails.dates_end]
+          }
+        },
+        forcedBlocks: null,
+        location: {
+          searchString: searchDestination.displayInfo.label,
+          destType: 'CITY',
+          destId: parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])
+        },
+        metaContext: {
+          metaCampaignId: 0,
+          externalTotalPrice: null,
+          feedPrice: null,
+          hotelCenterAccountId: null,
+          rateRuleId: null,
+          dragongateTraceId: null,
+          pricingProductsTag: null
+        },
+        nbRooms: userDetails.nr_rooms,
+        nbAdults: userDetails.passengers.adults,
+        nbChildren: userDetails.passengers.children + userDetails.passengers.infants,
+        showAparthotelAsHotel: true,
+        needsRoomsMatch: false,
+        optionalFeatures: {
+          forceArpExperiments: true,
+          testProperties: false
+        },
+        pagination: {
+          rowsPerPage: 25,
+          offset: 0
+        },
+        rawQueryForSession: `/searchresults.html?label=gen173nr-1FCAEoggI46AdIM1gEaAaIAQGYATG4ARfIAQzYAQHoAQH4AQKIAgGoAgO4Au7EusMGwAIB0gIkZmVhZmY4NjctNTYxNi00NjNhLWFhNWItOTQ3MTM4MmY1ZDE02AIF4AIB&aid=304142&ss=${searchDestination.displayInfo.label}&ssne=Tirana&ssne_untouched=Tirana&lang=en-us&sb=1&src_elem=sb&dest_id=${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&dest_type=city&place_id=city%2F${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&ac_position=0&ac_click_type=b&ac_langcode=en&ac_suggestion_list_length=5&search_selected=true&search_pageview_id=4bad78b750550427&checkin=${userDetails.dates_start}&checkout=${userDetails.dates_end}&group_adults=${userDetails.passengers.adults.toString()}&no_rooms=${userDetails.nr_rooms.toString()}&group_children=${(userDetails.passengers.children.toString() + userDetails.passengers.infants.toString()).toString()}`,
+        referrerBlock: {
+          clickPosition: 0,
+          clickType: 'b',
+          blockName: 'searchbox'
+        },
+        sbCalendarOpen: false,
+        travelPurpose: 2,
+        seoThemeIds: [],
+        useSearchParamsFromSession: true,
+        merchInput: {
+          testCampaignIds: []
+        },
+        webSearchContext: {
+          reason: 'CLIENT_SIDE_UPDATE',
+          source: 'SEARCH_RESULTS',
+          outcome: 'SEARCH_RESULTS'
+        },
+        clientSideRequestId: 'f980ad6826a5af517f1601400b34f2a5'
+      },
+      carouselLowCodeExp: false
+    })
 
     const options = {
       method: 'POST',
@@ -177,9 +305,9 @@ const findStays = async (userDetails) => {
         ac_meta: 'GhA0YmFkNzhiNzUwNTUwNDI3IAAoATICZW46BXBhcmlzQABKAFAA',
         checkin: userDetails.dates_start,
         checkout: userDetails.dates_end,
-        group_adults: '2',
-        no_rooms: '1',
-        group_children: '0'
+        group_adults: userDetails.passengers.adults.toString(),
+        no_rooms: userDetails.nr_rooms.toString(),
+        group_children: (userDetails.passengers.children.toString() + userDetails.passengers.infants.toString()).toString(),
       },
       headers: {
         'accept': '*/*',
@@ -203,7 +331,7 @@ const findStays = async (userDetails) => {
         'x-booking-site-type-id': '1',
         'x-booking-topic': 'capla_browser_b-search-web-searchresults',
         'cookie': 'pcm_personalization_disabled=0; cors_js=1; _gcl_au=1.1.1310596591.1751568863; FPID=FPID2.2.vWR8puxy5JGe1QiN0KoyXzXL9VppdvWQZHuStH3Cdzo%3D.1751568862; FPAU=1.1.1310596591.1751568863; _yjsu_yjad=1751568864.f264a27d-d049-4d9f-a9e1-d54cea8d3157; _ga_P07TP8FRGZ=GS2.1.s1751803652$o1$g0$t1751803653$j59$l0$h0; bkng_sso_session=eyJib29raW5nX2dsb2JhbCI6W3sibG9naW5faGludCI6IjdDUUpzSlhNbnViWDhpTnNubUhLYmVaeEcwUURjMStVYTBCZjM0R25YNUEifV19; bkng_sso_ses=eyJib29raW5nX2dsb2JhbCI6W3siaCI6IjdDUUpzSlhNbnViWDhpTnNubUhLYmVaeEcwUURjMStVYTBCZjM0R25YNUEifV19; _ga_4GY873RFCC=GS2.1.s1751803635$o1$g1$t1751805009$j5$l0$h0; _ga_ME6FRX2E79=GS2.1.s1751803340$o1$g1$t1751805635$j59$l0$h0; pcm_consent=consentedAt%3D2025-07-06T12%3A51%3A39.840Z%26countryCode%3DAL%26expiresAt%3D2026-01-02T12%3A51%3A39.840Z%26implicit%3Dfalse%26regionCode%3D10%26regulation%3Dnone%26legacyRegulation%3Dnone%26consentId%3Dcfc2866b-57c4-488d-a01f-df0d49cbbad4%26analytical%3Dtrue%26marketing%3Dtrue; BJS=-; _gid=GA1.2.1167518412.1752001663; bkng_prue=1; _gac_UA-116109-18=1.1752073531.CjwKCAjwprjDBhBTEiwA1m1d0hPzumuGQuZbSIO3suNkI5BYCsPPxn3VEfE5-Q4xCXd1GOBpxWRYXxoCyvcQAvD_BwE; _gcl_aw=GCL.1752073534.CjwKCAjwprjDBhBTEiwA1m1d0hPzumuGQuZbSIO3suNkI5BYCsPPxn3VEfE5-Q4xCXd1GOBpxWRYXxoCyvcQAvD_BwE; _gcl_gs=2.1.k1$i1752073528$u228698639; FPGCLGS=2.1.k1$i1752073531$u228698639; FPGCLAW=2.1.kCjwKCAjwprjDBhBTEiwA1m1d0hPzumuGQuZbSIO3suNkI5BYCsPPxn3VEfE5-Q4xCXd1GOBpxWRYXxoCyvcQAvD_BwE$i1752073541; FPLC=No79WZtW2AinHurv0EB%2FpIYe24Psn774za0wO1J0bVGQxKwjS9fXOJOz07UoOvp6rmoV4Vw7KG9fbJQ%2F%2BtYEOMidFAL1ort9%2BVk24tU%2Bdk1l%2B7z09b4lXyJKVCQKqg%3D%3D; cgumid=3gL_Xl9uTE9xJTJGcWRlVEJZNVFiUlRqR2tsU25EeWJ6QUdjblBEVGtua0clMkJzT3NCcyUzRA; _ga=GA1.1.1492352810.1751568862; cto_bundle=MSILxl9RdmZxRjRpcEZOdHFKNUh3S2puMVRvN0tWRUxoTldpQTlxNHU0cnY2Wmc1TUhNNm56cHBJV1BmT1FDNGJFY016Z3FtbFh5NTFlWkZwRXUlMkZsd2dRcVF6eVhLU0J3SkdwN25Vd004VCUyQkF4RiUyRjlRYVc3c0UwSjBaeiUyRldTZGNaJTJCZHhsdEllYkg5WmxCWjN6ajJ5MDFvWDBnJTNEJTNE; _uetsid=d556aa605c2e11f0a44655326db4aa1e; _uetvid=4ab5c08062db11ee9596f3f34ca7361e; _ga_A12345=GS2.1.s1752081003$o8$g1$t1752081021$j42$l0$h10977032; lastSeen=1752081021335; OptanonConsent=implicitConsentCountry=nonGDPR&implicitConsentDate=1751568861404&isGpcEnabled=0&datestamp=Wed+Jul+09+2025+19%3A10%3A26+GMT%2B0200+(Central+European+Summer+Time)&version=202501.2.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=3e95c4f8-9e7b-4a8c-8eac-2dca84813704&interactionCount=1&isAnonUser=1&landingPath=NotLandingPage&groups=C0001%3A1%2CC0002%3A1%2CC0004%3A1&AwaitingReconsent=false; bkng_sso_auth=CAIQ0+WGHxqKAfDcBd/mZEabURAxO2A90jdwLkC9c/P/6Oa6pcaGW1CWKHDBhg37ZCPA8wM2JWdD/IDSCkDTzmnGXd0jTnK98kbKpfTCsTcjKH1+6dCjLz+BpO9SYhMPIGFyfzUy9kNOzC150eLPDuc88je7TGU6L4xjgWWFYtwzbJ4u9ST2+7XSDOLvvo/+hxn5fA==; bkng=11UmFuZG9tSVYkc2RlIyh9Yaa29%2F3xUOLb9qg0InA%2FFDd4iALMnllEdA0ittVCW6ghi6pvm1NF9DqsxHvVH97EJqcc8y96GOtffgr2LIfweKaFS2E2q4NLXc5F7vse7D13IdFmgxAZWwOX8DurgfC28O4A33ywXbEwSlHiLyG5016Yvsk2KIl%2BcW4NxvlNdMKON3uwS9zfr%2B1vtG65O1uUDq1fq%2BbJmRu7%2FU6gFhYYOhk%3D; aws-waf-token=75de38f5-bd56-49e7-b2ac-77048522acb5:DgoAcut+MhywAgAA:jL49Hz1OZMT89VglvJ7UF8dnWuhoGH6iAf+6sJxB419i7Gep7DiyiMgehLuB3YUAiAu0AR6tPqSy9oMvnlon//4N3Q1KG+tq11l/2A2HaLblfnsDDQOT7Sn9EQ5yOk42RDUSl3ovX7+ysKZAbOEWXS8a3F/KOxQBI6JzZUhsPkJ+PFhxTadkk22MKohAofmI893eff4Ruxf5aH2a6Eexb9wt1rpQfIDK2f3uy2fhE8OV3EdIHfso4wzYoEyvlcVHeU4=',
-        'Referer': `https://www.booking.com/searchresults.html?label=gen173nr-1FCAEoggI46AdIM1gEaAaIAQGYATG4ARfIAQzYAQHoAQH4AQKIAgGoAgO4Au7EusMGwAIB0gIkZmVhZmY4NjctNTYxNi00NjNhLWFhNWItOTQ3MTM4MmY1ZDE02AIF4AIB&aid=304142&ss=${searchDestination.displayInfo.label}&ssne=Tirana&ssne_untouched=Tirana&lang=en-us&sb=1&src_elem=sb&dest_id=${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&dest_type=city&place_id=city%2F${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&ac_position=0&ac_click_type=b&ac_langcode=en&ac_suggestion_list_length=5&search_selected=true&search_pageview_id=4bad78b750550427&checkin=${userDetails.dates_start}&checkout=${userDetails.dates_end}&group_adults=2&no_rooms=1&group_children=0`,
+        'Referer': `https://www.booking.com/searchresults.html?label=gen173nr-1FCAEoggI46AdIM1gEaAaIAQGYATG4ARfIAQzYAQHoAQH4AQKIAgGoAgO4Au7EusMGwAIB0gIkZmVhZmY4NjctNTYxNi00NjNhLWFhNWItOTQ3MTM4MmY1ZDE02AIF4AIB&aid=304142&ss=${searchDestination.displayInfo.label}&ssne=Tirana&ssne_untouched=Tirana&lang=en-us&sb=1&src_elem=sb&dest_id=${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&dest_type=city&place_id=city%2F${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&ac_position=0&ac_click_type=b&ac_langcode=en&ac_suggestion_list_length=5&search_selected=true&search_pageview_id=4bad78b750550427&checkin=${userDetails.dates_start}&checkout=${userDetails.dates_end}&group_adults=${userDetails.passengers.adults.toString()}&no_rooms=${userDetails.nr_rooms.toString()}&group_children=${(userDetails.passengers.children.toString() + userDetails.passengers.infants.toString()).toString()}`,
         'Referrer-Policy': 'origin-when-cross-origin'
       },
       data: {
@@ -248,9 +376,9 @@ const findStays = async (userDetails) => {
               dragongateTraceId: null,
               pricingProductsTag: null
             },
-            nbRooms: 1,
-            nbAdults: 2,
-            nbChildren: 0,
+            nbRooms: userDetails.nr_rooms,
+            nbAdults: userDetails.passengers.adults,
+            nbChildren: userDetails.passengers.children + userDetails.passengers.infants,
             showAparthotelAsHotel: true,
             needsRoomsMatch: false,
             optionalFeatures: {
@@ -261,7 +389,7 @@ const findStays = async (userDetails) => {
               rowsPerPage: 25,
               offset: 0
             },
-            rawQueryForSession: `/searchresults.html?label=gen173nr-1FCAEoggI46AdIM1gEaAaIAQGYATG4ARfIAQzYAQHoAQH4AQKIAgGoAgO4Au7EusMGwAIB0gIkZmVhZmY4NjctNTYxNi00NjNhLWFhNWItOTQ3MTM4MmY1ZDE02AIF4AIB&aid=304142&ss=${searchDestination.displayInfo.label}&ssne=Tirana&ssne_untouched=Tirana&lang=en-us&sb=1&src_elem=sb&dest_id=${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&dest_type=city&place_id=city%2F${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&ac_position=0&ac_click_type=b&ac_langcode=en&ac_suggestion_list_length=5&search_selected=true&search_pageview_id=4bad78b750550427&checkin=${userDetails.dates_start}&checkout=${userDetails.dates_end}&group_adults=2&no_rooms=1&group_children=0`,
+            rawQueryForSession: `/searchresults.html?label=gen173nr-1FCAEoggI46AdIM1gEaAaIAQGYATG4ARfIAQzYAQHoAQH4AQKIAgGoAgO4Au7EusMGwAIB0gIkZmVhZmY4NjctNTYxNi00NjNhLWFhNWItOTQ3MTM4MmY1ZDE02AIF4AIB&aid=304142&ss=${searchDestination.displayInfo.label}&ssne=Tirana&ssne_untouched=Tirana&lang=en-us&sb=1&src_elem=sb&dest_id=${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&dest_type=city&place_id=city%2F${parseInt(searchDestination.metaData.autocompleteResultId.split("/")[1])}&ac_position=0&ac_click_type=b&ac_langcode=en&ac_suggestion_list_length=5&search_selected=true&search_pageview_id=4bad78b750550427&checkin=${userDetails.dates_start}&checkout=${userDetails.dates_end}&group_adults=${userDetails.passengers.adults.toString()}&no_rooms=${userDetails.nr_rooms.toString()}&group_children=${(userDetails.passengers.children.toString() + userDetails.passengers.infants.toString()).toString()}`,
             referrerBlock: {
               clickPosition: 0,
               clickType: 'b',
@@ -1893,8 +2021,6 @@ const findStays = async (userDetails) => {
 async function parseBookingResponseToStays(userDetails, tripId = null) {
   const jsonData = await findStays(userDetails);
 
-  console.log(jsonData)
-
   if (!tripId) {
     tripId = uuidv4();
   }
@@ -1904,6 +2030,8 @@ async function parseBookingResponseToStays(userDetails, tripId = null) {
   // Navigate to the search results
   try {
     const results = jsonData.data.searchQueries.search.results;
+
+    // console.log(userDetails)
 
     results.forEach((propertyData, idx) => {
       try {
@@ -1947,7 +2075,7 @@ async function parseBookingResponseToStays(userDetails, tripId = null) {
 
         const photo = "https://cf.bstatic.com" + propertyData.basicPropertyData.photos.main.highResUrl.relativeUrl;
 
-        const bookingLink = generateBookingLink(basicData, propertyData);
+        const bookingLink = generateBookingLink(basicData, propertyData, userDetails);
 
         const finalPrice = propertyData.blocks?.[0]?.finalPrice?.amount ?? 0;
         const currency = propertyData.blocks?.[0]?.finalPrice?.currency ?? 0;
@@ -1970,7 +2098,7 @@ async function parseBookingResponseToStays(userDetails, tripId = null) {
           currency: currency,
           booking_reference: null,
           room_type: null,
-          guests_count: 1,
+          guests_count: userDetails.passengers.adults + userDetails.passengers.children + userDetails.passengers.infants,
           phone: null,
           email: null,
           website: `https://www.booking.com/hotel/${basicData.pageName || ''}.html`,
@@ -2009,7 +2137,7 @@ function mapAccommodationType(typeId) {
   return typeMapping[typeId] || 'hotel';
 }
 
-function generateBookingLink(basicData, propertyData) {
+function generateBookingLink(basicData, propertyData, userDetails) {
   const baseUrl = 'https://www.booking.com/hotel/';
   const pageName = basicData.pageName || '';
   const propertyId = basicData.id || '';
@@ -2022,9 +2150,9 @@ function generateBookingLink(basicData, propertyData) {
     'dest_type': 'city',
     'checkin': getDefaultCheckinDate(),
     'checkout': getDefaultCheckoutDate(),
-    'group_adults': '2',
-    'group_children': '0',
-    'no_rooms': '1',
+    'group_adults': userDetails.passengers.adults.toString(),
+    'group_children': (userDetails.passengers.children.toString() + userDetails.passengers.infants.toString()).toString(),
+    'no_rooms': userDetails.nr_rooms.toString(),
     'sb_price_type': 'total',
     'type': 'total'
   });
